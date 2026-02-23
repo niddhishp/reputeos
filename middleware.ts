@@ -60,17 +60,17 @@ export default async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith('/dashboard') || 
-      request.nextUrl.pathname.startsWith('/clients')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-  }
+  //if (request.nextUrl.pathname.startsWith('/dashboard') || 
+    //  request.nextUrl.pathname.startsWith('/clients')) {
+    //if (!user) {
+      //return NextResponse.redirect(new URL('/login', request.url));
+    //}
+  //}
 
   // Redirect authenticated users away from auth pages
-  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
+ if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
+  return NextResponse.redirect(new URL('/clients/new', request.url));
+}
 
   return response;
 }
