@@ -1,12 +1,13 @@
-// middleware.ts - Updated for Next.js 16
+// middleware.ts - Production-hardened authentication middleware
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+const PROTECTED_PATHS = ['/dashboard', '/clients', '/settings'];
+const AUTH_PATHS = ['/login', '/signup'];
+
 export default async function middleware(request: NextRequest) {
   let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+    request: { headers: request.headers },
   });
 
   const supabase = createServerClient(
@@ -18,63 +19,52 @@ export default async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
+          request.cookies.set({ name, value, ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
+          request.cookies.set({ name, value: '', ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.cookies.set({ name, value: '', ...options });
         },
       },
     }
   );
 
+  // Always call getUser() to refresh the session token
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protect dashboard routes
-  //if (request.nextUrl.pathname.startsWith('/dashboard') || 
-    //  request.nextUrl.pathname.startsWith('/clients')) {
-    //if (!user) {
-      //return NextResponse.redirect(new URL('/login', request.url));
-    //}
-  //}
+  const pathname = request.nextUrl.pathname;
+  const isProtectedPath = PROTECTED_PATHS.some((p) => pathname.startsWith(p));
+  const isAuthPath = AUTH_PATHS.some((p) => pathname.startsWith(p));
 
-  // Redirect authenticated users away from auth pages
- if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
-  return NextResponse.redirect(new URL('/clients/new', request.url));
-}
+  // Redirect unauthenticated users to login
+  if (isProtectedPath && !user) {
+    const redirectUrl = new URL('/login', request.url);
+    redirectUrl.searchParams.set('from', pathname);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // Redirect authenticated users away from auth pages → clients list
+  if (isAuthPath && user) {
+    const from = request.nextUrl.searchParams.get('from');
+    const destination = from && from.startsWith('/') ? from : '/clients';
+    return NextResponse.redirect(new URL(destination, request.url));
+  }
+
+  // Root redirect
+  if (pathname === '/') {
+    return NextResponse.redirect(
+      new URL(user ? '/clients' : '/login', request.url)
+    );
+  }
 
   return response;
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|public).*)'],
 };

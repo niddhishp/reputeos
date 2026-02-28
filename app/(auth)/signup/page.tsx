@@ -5,16 +5,23 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Lock, Mail, User, Building2, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, User, Building2, ArrowRight, Shield } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { useToast } from '@/components/ui/use-toast';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase/client';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -22,6 +29,7 @@ export default function SignupPage() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -30,18 +38,23 @@ export default function SignupPage() {
     name: '',
     company: '',
     role: 'consultant',
-    plan: 'solo'
+    plan: 'solo',
   });
 
   const updateField = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
 
@@ -49,8 +62,6 @@ export default function SignupPage() {
     setError('');
 
     try {
-      const supabase = createClientComponentClient();
-      
       const { error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -59,25 +70,25 @@ export default function SignupPage() {
             name: formData.name,
             company: formData.company,
             role: formData.role,
-            plan: formData.plan
-          }
-        }
+            plan: formData.plan,
+          },
+        },
       });
 
-      if (signUpError) {
-        throw signUpError;
-      }
+      if (signUpError) throw signUpError;
 
       toast({
-        title: "Account created",
-        description: "Welcome to PersonaOS! Check your email to verify your account."
+        title: 'Account created',
+        description:
+          'Welcome to ReputeOS! Check your email to verify your account.',
       });
 
-      router.push('/dashboard');
+      router.push('/clients');
       router.refresh();
-
-    } catch (err: any) {
-      setError(err.message || 'Failed to create account');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to create account';
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -92,22 +103,34 @@ export default function SignupPage() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <h1 className="text-display-md font-bold text-neutral-900">PersonaOS</h1>
-          <p className="text-body text-neutral-600 mt-2">Create your account</p>
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <Shield className="h-8 w-8 text-blue-600" />
+            <h1 className="text-3xl font-bold text-neutral-900">ReputeOS</h1>
+          </div>
+          <p className="text-neutral-600">Create your account</p>
         </div>
 
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-caption text-neutral-500">Step {step} of 2</span>
+              <span className="text-xs text-neutral-500">Step {step} of 2</span>
             </div>
             <Progress value={step === 1 ? 50 : 100} className="h-1" />
-            <CardTitle className="text-heading-lg mt-4">
+            <CardTitle className="mt-4">
               {step === 1 ? 'Account Details' : 'Profile Setup'}
             </CardTitle>
           </CardHeader>
 
-          <form onSubmit={step === 1 ? (e) => { e.preventDefault(); setStep(2); } : handleSignup}>
+          <form
+            onSubmit={
+              step === 1
+                ? (e) => {
+                    e.preventDefault();
+                    setStep(2);
+                  }
+                : handleSignup
+            }
+          >
             <CardContent className="space-y-4">
               {error && (
                 <Alert variant="destructive">
@@ -129,6 +152,7 @@ export default function SignupPage() {
                         onChange={(e) => updateField('email', e.target.value)}
                         className="pl-10"
                         required
+                        autoComplete="email"
                       />
                     </div>
                   </div>
@@ -139,14 +163,27 @@ export default function SignupPage() {
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
                       <Input
                         id="password"
-                        type="password"
-                        placeholder="••••••••"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Min 8 characters"
                         value={formData.password}
                         onChange={(e) => updateField('password', e.target.value)}
-                        className="pl-10"
+                        className="pl-10 pr-10"
                         required
                         minLength={8}
+                        autoComplete="new-password"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
 
@@ -159,28 +196,25 @@ export default function SignupPage() {
                       value={formData.confirmPassword}
                       onChange={(e) => updateField('confirmPassword', e.target.value)}
                       required
+                      autoComplete="new-password"
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Plan</Label>
-                    <RadioGroup 
-                      value={formData.plan} 
+                    <RadioGroup
+                      value={formData.plan}
                       onValueChange={(v) => updateField('plan', v)}
                       className="grid grid-cols-3 gap-3"
                     >
                       {['solo', 'agency', 'enterprise'].map((plan) => (
                         <div key={plan}>
-                          <RadioGroupItem
-                            value={plan}
-                            id={plan}
-                            className="peer sr-only"
-                          />
+                          <RadioGroupItem value={plan} id={plan} className="peer sr-only" />
                           <Label
                             htmlFor={plan}
-                            className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-muted peer-data-[state=checked]:border-primary-500 peer-data-[state=checked]:bg-primary-50 [&:has([data-state=checked])]:border-primary-500 cursor-pointer"
+                            className="flex flex-col items-center rounded-md border-2 border-muted p-3 hover:bg-muted peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50 cursor-pointer"
                           >
-                            <span className="text-body-sm font-semibold capitalize">{plan}</span>
+                            <span className="text-sm font-semibold capitalize">{plan}</span>
                           </Label>
                         </div>
                       ))}
@@ -220,39 +254,26 @@ export default function SignupPage() {
 
                   <div className="space-y-2">
                     <Label>Role</Label>
-                    <RadioGroup 
-                      value={formData.role} 
+                    <RadioGroup
+                      value={formData.role}
                       onValueChange={(v) => updateField('role', v)}
                       className="grid grid-cols-2 gap-3"
                     >
-                      <div>
-                        <RadioGroupItem
-                          value="consultant"
-                          id="consultant"
-                          className="peer sr-only"
-                        />
-                        <Label
-                          htmlFor="consultant"
-                          className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-muted peer-data-[state=checked]:border-primary-500 peer-data-[state=checked]:bg-primary-50 [&:has([data-state=checked])]:border-primary-500 cursor-pointer"
-                        >
-                          <span className="text-body-sm font-semibold">Consultant</span>
-                          <span className="text-caption text-neutral-500">Full platform access</span>
-                        </Label>
-                      </div>
-                      <div>
-                        <RadioGroupItem
-                          value="client_view"
-                          id="client_view"
-                          className="peer sr-only"
-                        />
-                        <Label
-                          htmlFor="client_view"
-                          className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-transparent p-4 hover:bg-muted peer-data-[state=checked]:border-primary-500 peer-data-[state=checked]:bg-primary-50 [&:has([data-state=checked])]:border-primary-500 cursor-pointer"
-                        >
-                          <span className="text-body-sm font-semibold">Client View</span>
-                          <span className="text-caption text-neutral-500">Read-only access</span>
-                        </Label>
-                      </div>
+                      {[
+                        { value: 'consultant', label: 'Consultant', desc: 'Full platform access' },
+                        { value: 'client_view', label: 'Client View', desc: 'Read-only access' },
+                      ].map((r) => (
+                        <div key={r.value}>
+                          <RadioGroupItem value={r.value} id={r.value} className="peer sr-only" />
+                          <Label
+                            htmlFor={r.value}
+                            className="flex flex-col items-center rounded-md border-2 border-muted p-4 hover:bg-muted peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50 cursor-pointer"
+                          >
+                            <span className="text-sm font-semibold">{r.label}</span>
+                            <span className="text-xs text-neutral-500 mt-1">{r.desc}</span>
+                          </Label>
+                        </div>
+                      ))}
                     </RadioGroup>
                   </div>
                 </>
@@ -262,8 +283,8 @@ export default function SignupPage() {
             <CardFooter className="flex flex-col gap-4">
               <div className="flex gap-3 w-full">
                 {step === 2 && (
-                  <Button 
-                    type="button" 
+                  <Button
+                    type="button"
                     variant="outline"
                     className="flex-1"
                     onClick={() => setStep(1)}
@@ -271,14 +292,14 @@ export default function SignupPage() {
                     Back
                   </Button>
                 )}
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="flex-1"
                   size="lg"
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    'Creating account...'
+                    'Creating account…'
                   ) : step === 1 ? (
                     <>
                       Continue
@@ -290,9 +311,9 @@ export default function SignupPage() {
                 </Button>
               </div>
 
-              <p className="text-body-sm text-neutral-600 text-center">
+              <p className="text-sm text-neutral-600 text-center">
                 Already have an account?{' '}
-                <Link href="/login" className="text-primary-600 hover:text-primary-700 font-medium">
+                <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
                   Sign in
                 </Link>
               </p>
@@ -303,5 +324,3 @@ export default function SignupPage() {
     </div>
   );
 }
-
-import { Progress } from '@/components/ui/progress';

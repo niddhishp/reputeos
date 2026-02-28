@@ -2,21 +2,29 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Lock, Mail, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, ArrowRight, Shield } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useToast } from '@/components/ui/use-toast';
-import { supabase } from "@/lib/supabase/client";
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,23 +39,25 @@ export default function LoginPage() {
 
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({
-  email,
-  password,
-});
-
-      if (signInError) {
-        throw signInError;
-      }
-
-      toast({
-        title: "Welcome back",
-        description: "Successfully signed in to PersonaOS."
+        email,
+        password,
       });
 
-    window.location.href = "/clients/new";
+      if (signInError) throw signInError;
 
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign in');
+      toast({
+        title: 'Welcome back',
+        description: 'Successfully signed in to ReputeOS.',
+      });
+
+      // Respect the 'from' redirect param, default to /clients
+      const from = searchParams.get('from');
+      const destination = from && from.startsWith('/') ? from : '/clients';
+      router.push(destination);
+      router.refresh();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to sign in';
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -62,14 +72,17 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <h1 className="text-display-md font-bold text-neutral-900">PersonaOS</h1>
-          <p className="text-body text-neutral-600 mt-2">Strategic Reputation Engineering</p>
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <Shield className="h-8 w-8 text-primary-500" />
+            <h1 className="text-3xl font-bold text-neutral-900">ReputeOS</h1>
+          </div>
+          <p className="text-neutral-600">Strategic Reputation Engineering</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-heading-lg">Sign In</CardTitle>
-            <CardDescription className="text-body-sm text-neutral-600">
+            <CardTitle>Sign In</CardTitle>
+            <CardDescription>
               Enter your credentials to access your dashboard
             </CardDescription>
           </CardHeader>
@@ -94,6 +107,7 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10"
                     required
+                    autoComplete="email"
                   />
                 </div>
               </div>
@@ -110,27 +124,33 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 pr-10"
                     required
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
               </div>
             </CardContent>
 
             <CardFooter className="flex flex-col gap-4">
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full"
                 size="lg"
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  'Signing in...'
+                  'Signing in…'
                 ) : (
                   <>
                     Sign In
@@ -139,9 +159,12 @@ export default function LoginPage() {
                 )}
               </Button>
 
-              <p className="text-body-sm text-neutral-600 text-center">
-                Don't have an account?{' '}
-                <Link href="/signup" className="text-primary-600 hover:text-primary-700 font-medium">
+              <p className="text-sm text-neutral-600 text-center">
+                Don&apos;t have an account?{' '}
+                <Link
+                  href="/signup"
+                  className="text-blue-600 hover:text-blue-700 font-medium"
+                >
                   Sign up
                 </Link>
               </p>
@@ -149,8 +172,8 @@ export default function LoginPage() {
           </form>
         </Card>
 
-        <p className="text-caption text-neutral-500 text-center mt-8">
-          Protected by enterprise-grade security. Your data is encrypted.
+        <p className="text-xs text-neutral-500 text-center mt-8">
+          Protected by enterprise-grade security. Your data is encrypted at rest and in transit.
         </p>
       </motion.div>
     </div>
