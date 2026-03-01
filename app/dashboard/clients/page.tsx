@@ -1,9 +1,9 @@
 // app/dashboard/clients/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Users, Search, MoreVertical, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Plus, Users, UserCircle, Search } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ interface Client {
   status: string;
   baseline_lsi: number | null;
   target_lsi: number;
+  is_self_profile: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,22 +34,61 @@ export default function ClientsPage() {
   const [filtered, setFiltered] = useState<Client[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>('consultant');
 
-  useEffect(() => {
-    async function fetchClients() {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('updated_at', { ascending: false });
+  const fetchData = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      if (!error && data) {
-        setClients(data);
-        setFiltered(data);
+    // Get role
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role, name')
+      .eq('id', user.id)
+      .single();
+
+    const role = profile?.role ?? user.user_metadata?.role ?? 'consultant';
+    setUserRole(role);
+
+    // Fetch clients
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (!error && data) {
+      // If individual user with no profiles yet, auto-create their self-profile
+      if (role === 'individual' && data.length === 0) {
+        const name = profile?.name ?? user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'My Profile';
+        const { data: newProfile, error: createError } = await supabase
+          .from('clients')
+          .insert({
+            user_id: user.id,
+            name,
+            is_self_profile: true,
+            status: 'active',
+          })
+          .select()
+          .single();
+
+        if (!createError && newProfile) {
+          setClients([newProfile]);
+          setFiltered([newProfile]);
+          setLoading(false);
+          // Navigate directly to their profile
+          router.push(`/dashboard/clients/${newProfile.id}`);
+          return;
+        }
       }
-      setLoading(false);
+
+      setClients(data);
+      setFiltered(data);
     }
-    fetchClients();
-  }, []);
+
+    setLoading(false);
+  }, [router]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
     const q = search.toLowerCase();
@@ -62,34 +102,58 @@ export default function ClientsPage() {
     );
   }, [search, clients]);
 
+  const isIndividual = userRole === 'individual';
+
+  // Individuals with their self-profile go straight to it
+  useEffect(() => {
+    if (isIndividual && clients.length === 1 && !loading) {
+      router.push(`/dashboard/clients/${clients[0].id}`);
+    }
+  }, [isIndividual, clients, loading, router]);
+
+  const pageTitle = isIndividual ? 'My Profile' : 'Clients';
+  const pageIcon = isIndividual ? UserCircle : Users;
+  const emptyTitle = isIndividual ? 'Setting up your profile…' : 'No clients yet';
+  const emptyDesc = isIndividual
+    ? 'Your personal reputation profile is being created.'
+    : 'Add your first client to get started with reputation engineering.';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Clients</h1>
+          <h1 className="text-2xl font-semibold text-neutral-900">{pageTitle}</h1>
           <p className="text-sm text-neutral-500 mt-1">
-            {clients.length} client{clients.length !== 1 ? 's' : ''} managed
+            {isIndividual
+              ? 'Your personal reputation dashboard'
+              : `${clients.length} client${clients.length !== 1 ? 's' : ''} managed`}
           </p>
         </div>
-        <Button onClick={() => router.push('/clients/new')}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Client
-        </Button>
+        {/* Only consultants can add more clients */}
+        {!isIndividual && (
+          <Button onClick={() => router.push('/dashboard/clients/new')}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Client
+          </Button>
+        )}
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-        <Input
-          placeholder="Search clients…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      {/* Search — only shown for consultants with multiple clients */}
+      {!isIndividual && (
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+          <Input
+            placeholder="Search clients…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => (
+          {[...Array(isIndividual ? 1 : 6)].map((_, i) => (
             <Card key={i}>
               <CardContent className="p-6 space-y-3">
                 <Skeleton className="h-5 w-2/3" />
@@ -101,16 +165,14 @@ export default function ClientsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
-          icon={Users}
-          title={search ? 'No matching clients' : 'No clients yet'}
+          icon={pageIcon}
+          title={search ? 'No matching results' : emptyTitle}
           description={
-            search
-              ? 'Try a different search term.'
-              : 'Add your first client to get started with reputation engineering.'
+            search ? 'Try a different search term.' : emptyDesc
           }
           action={
-            !search
-              ? { label: 'Add Client', onClick: () => router.push('/clients/new') }
+            !search && !isIndividual
+              ? { label: 'Add Client', onClick: () => router.push('/dashboard/clients/new') }
               : undefined
           }
         />
@@ -120,7 +182,8 @@ export default function ClientsPage() {
             <ClientCard
               key={client.id}
               client={client}
-              onClick={() => router.push(`/clients/${client.id}`)}
+              isIndividual={isIndividual}
+              onClick={() => router.push(`/dashboard/clients/${client.id}`)}
             />
           ))}
         </div>
@@ -131,9 +194,11 @@ export default function ClientsPage() {
 
 function ClientCard({
   client,
+  isIndividual,
   onClick,
 }: {
   client: Client;
+  isIndividual: boolean;
   onClick: () => void;
 }) {
   const progress = client.baseline_lsi
@@ -148,7 +213,9 @@ function ClientCard({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-neutral-900 truncate">{client.name}</p>
+            <p className="font-semibold text-neutral-900 truncate">
+              {isIndividual && client.is_self_profile ? 'My Reputation Profile' : client.name}
+            </p>
             {client.company && (
               <p className="text-sm text-neutral-500 truncate">{client.company}</p>
             )}
@@ -171,7 +238,7 @@ function ClientCard({
           {client.baseline_lsi ? (
             <span className="font-semibold text-blue-600">{client.baseline_lsi}/100</span>
           ) : (
-            <span className="text-neutral-400">Not scored</span>
+            <span className="text-neutral-400">Not scored yet</span>
           )}
         </div>
 

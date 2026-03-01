@@ -5,27 +5,33 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Lock, Mail, User, Building2, ArrowRight, Shield } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, User, Building2, ArrowRight, Shield, UserCircle, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase/client';
+
+const roleOptions = [
+  {
+    value: 'individual',
+    icon: UserCircle,
+    label: 'Managing my own reputation',
+    desc: 'I want to build and protect my personal brand',
+  },
+  {
+    value: 'consultant',
+    icon: Users,
+    label: 'Managing clients',
+    desc: "I'm a consultant managing multiple people's reputations",
+  },
+];
 
 export default function SignupPage() {
   const router = useRouter();
-  const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -37,22 +43,19 @@ export default function SignupPage() {
     confirmPassword: '',
     name: '',
     company: '',
-    role: 'consultant',
+    role: 'individual',
     plan: 'solo',
   });
 
-  const updateField = (field: string, value: string) => {
+  const update = (field: string, value: string) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
-  };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
     if (formData.password.length < 8) {
       setError('Password must be at least 8 characters');
       return;
@@ -77,18 +80,10 @@ export default function SignupPage() {
 
       if (signUpError) throw signUpError;
 
-      toast({
-        title: 'Account created',
-        description:
-          'Welcome to ReputeOS! Check your email to verify your account.',
-      });
-
-      router.push('/clients');
+      router.push('/dashboard/clients');
       router.refresh();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to create account';
-      setError(message);
+      setError(err instanceof Error ? err.message : 'Failed to create account');
     } finally {
       setIsLoading(false);
     }
@@ -99,7 +94,7 @@ export default function SignupPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.4 }}
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
@@ -117,17 +112,14 @@ export default function SignupPage() {
             </div>
             <Progress value={step === 1 ? 50 : 100} className="h-1" />
             <CardTitle className="mt-4">
-              {step === 1 ? 'Account Details' : 'Profile Setup'}
+              {step === 1 ? 'Account Details' : 'Tell us about yourself'}
             </CardTitle>
           </CardHeader>
 
           <form
             onSubmit={
               step === 1
-                ? (e) => {
-                    e.preventDefault();
-                    setStep(2);
-                  }
+                ? (e) => { e.preventDefault(); setStep(2); }
                 : handleSignup
             }
           >
@@ -140,6 +132,7 @@ export default function SignupPage() {
 
               {step === 1 ? (
                 <>
+                  {/* Email */}
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <div className="relative">
@@ -149,7 +142,7 @@ export default function SignupPage() {
                         type="email"
                         placeholder="you@company.com"
                         value={formData.email}
-                        onChange={(e) => updateField('email', e.target.value)}
+                        onChange={(e) => update('email', e.target.value)}
                         className="pl-10"
                         required
                         autoComplete="email"
@@ -157,6 +150,7 @@ export default function SignupPage() {
                     </div>
                   </div>
 
+                  {/* Password */}
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
                     <div className="relative">
@@ -166,7 +160,7 @@ export default function SignupPage() {
                         type={showPassword ? 'text' : 'password'}
                         placeholder="Min 8 characters"
                         value={formData.password}
-                        onChange={(e) => updateField('password', e.target.value)}
+                        onChange={(e) => update('password', e.target.value)}
                         className="pl-10 pr-10"
                         required
                         minLength={8}
@@ -178,15 +172,12 @@ export default function SignupPage() {
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
                       >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                   </div>
 
+                  {/* Confirm Password */}
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword">Confirm Password</Label>
                     <Input
@@ -194,35 +185,15 @@ export default function SignupPage() {
                       type="password"
                       placeholder="••••••••"
                       value={formData.confirmPassword}
-                      onChange={(e) => updateField('confirmPassword', e.target.value)}
+                      onChange={(e) => update('confirmPassword', e.target.value)}
                       required
                       autoComplete="new-password"
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>Plan</Label>
-                    <RadioGroup
-                      value={formData.plan}
-                      onValueChange={(v) => updateField('plan', v)}
-                      className="grid grid-cols-3 gap-3"
-                    >
-                      {['solo', 'agency', 'enterprise'].map((plan) => (
-                        <div key={plan}>
-                          <RadioGroupItem value={plan} id={plan} className="peer sr-only" />
-                          <Label
-                            htmlFor={plan}
-                            className="flex flex-col items-center rounded-md border-2 border-muted p-3 hover:bg-muted peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50 cursor-pointer"
-                          >
-                            <span className="text-sm font-semibold capitalize">{plan}</span>
-                          </Label>
-                        </div>
-                      ))}
-                    </RadioGroup>
-                  </div>
                 </>
               ) : (
                 <>
+                  {/* Name */}
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
                     <div className="relative">
@@ -231,50 +202,57 @@ export default function SignupPage() {
                         id="name"
                         placeholder="John Doe"
                         value={formData.name}
-                        onChange={(e) => updateField('name', e.target.value)}
+                        onChange={(e) => update('name', e.target.value)}
                         className="pl-10"
                         required
                       />
                     </div>
                   </div>
 
+                  {/* Company (optional) */}
                   <div className="space-y-2">
-                    <Label htmlFor="company">Company (Optional)</Label>
+                    <Label htmlFor="company">Company <span className="text-neutral-400">(optional)</span></Label>
                     <div className="relative">
                       <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
                       <Input
                         id="company"
                         placeholder="Acme Inc"
                         value={formData.company}
-                        onChange={(e) => updateField('company', e.target.value)}
+                        onChange={(e) => update('company', e.target.value)}
                         className="pl-10"
                       />
                     </div>
                   </div>
 
+                  {/* Role — primary product decision */}
                   <div className="space-y-2">
-                    <Label>Role</Label>
-                    <RadioGroup
-                      value={formData.role}
-                      onValueChange={(v) => updateField('role', v)}
-                      className="grid grid-cols-2 gap-3"
-                    >
-                      {[
-                        { value: 'consultant', label: 'Consultant', desc: 'Full platform access' },
-                        { value: 'client_view', label: 'Client View', desc: 'Read-only access' },
-                      ].map((r) => (
-                        <div key={r.value}>
-                          <RadioGroupItem value={r.value} id={r.value} className="peer sr-only" />
-                          <Label
-                            htmlFor={r.value}
-                            className="flex flex-col items-center rounded-md border-2 border-muted p-4 hover:bg-muted peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50 cursor-pointer"
+                    <Label>How will you use ReputeOS?</Label>
+                    <div className="grid grid-cols-1 gap-3">
+                      {roleOptions.map((option) => {
+                        const Icon = option.icon;
+                        const selected = formData.role === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => update('role', option.value)}
+                            className={`flex items-center gap-4 rounded-lg border-2 p-4 text-left transition-colors ${
+                              selected
+                                ? 'border-blue-600 bg-blue-50'
+                                : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50'
+                            }`}
                           >
-                            <span className="text-sm font-semibold">{r.label}</span>
-                            <span className="text-xs text-neutral-500 mt-1">{r.desc}</span>
-                          </Label>
-                        </div>
-                      ))}
-                    </RadioGroup>
+                            <Icon className={`h-6 w-6 shrink-0 ${selected ? 'text-blue-600' : 'text-neutral-400'}`} />
+                            <div>
+                              <p className={`text-sm font-medium ${selected ? 'text-blue-900' : 'text-neutral-900'}`}>
+                                {option.label}
+                              </p>
+                              <p className="text-xs text-neutral-500 mt-0.5">{option.desc}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </>
               )}
@@ -292,19 +270,9 @@ export default function SignupPage() {
                     Back
                   </Button>
                 )}
-                <Button
-                  type="submit"
-                  className="flex-1"
-                  size="lg"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    'Creating account…'
-                  ) : step === 1 ? (
-                    <>
-                      Continue
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </>
+                <Button type="submit" className="flex-1" size="lg" disabled={isLoading}>
+                  {isLoading ? 'Creating account…' : step === 1 ? (
+                    <> Continue <ArrowRight className="ml-2 h-4 w-4" /> </>
                   ) : (
                     'Create Account'
                   )}

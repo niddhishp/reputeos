@@ -12,6 +12,7 @@ import {
   CheckSquare,
   Shield,
   Users,
+  UserCircle,
   Settings,
   LogOut,
   ChevronLeft,
@@ -21,24 +22,36 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 
-const modules = [
-  { label: 'Clients', href: '/dashboard/clients', icon: Users },
-  { label: 'Discover', hrefPattern: '/discover', icon: Search },
-  { label: 'Diagnose', hrefPattern: '/diagnose', icon: BarChart2 },
-  { label: 'Position', hrefPattern: '/position', icon: Target },
-  { label: 'Express', hrefPattern: '/express', icon: PenLine },
-  { label: 'Validate', hrefPattern: '/validate', icon: CheckSquare },
-  { label: 'Shield', hrefPattern: '/shield', icon: Shield },
-];
-
 interface SidebarNavProps {
   user: User;
+  role?: string;
 }
 
-export function SidebarNav({ user }: SidebarNavProps) {
+export function SidebarNav({ user, role = 'consultant' }: SidebarNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+
+  const isIndividual = role === 'individual';
+
+  // Smart label: individuals see "My Profile", consultants see "Clients"
+  const profilesLabel = isIndividual ? 'My Profile' : 'Clients';
+  const ProfileIcon = isIndividual ? UserCircle : Users;
+
+  const modules = [
+    {
+      label: profilesLabel,
+      href: '/dashboard/clients',
+      icon: ProfileIcon,
+      alwaysShow: true,
+    },
+    { label: 'Discover',  hrefPattern: '/discover',  icon: Search },
+    { label: 'Diagnose',  hrefPattern: '/diagnose',  icon: BarChart2 },
+    { label: 'Position',  hrefPattern: '/position',  icon: Target },
+    { label: 'Express',   hrefPattern: '/express',   icon: PenLine },
+    { label: 'Validate',  hrefPattern: '/validate',  icon: CheckSquare },
+    { label: 'Shield',    hrefPattern: '/shield',    icon: Shield },
+  ];
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -80,6 +93,15 @@ export function SidebarNav({ user }: SidebarNavProps) {
         </button>
       </div>
 
+      {/* Role badge */}
+      {!collapsed && (
+        <div className="px-4 py-2 border-b border-neutral-100">
+          <span className="text-xs font-medium text-neutral-400 uppercase tracking-wide">
+            {isIndividual ? 'Personal' : 'Consultant'}
+          </span>
+        </div>
+      )}
+
       {/* Nav Items */}
       <nav className="flex-1 py-4 space-y-1 px-2">
         {modules.map((item) => {
@@ -113,10 +135,10 @@ export function SidebarNav({ user }: SidebarNavProps) {
       {/* Bottom */}
       <div className="p-2 border-t border-neutral-100 space-y-1">
         <Link
-          href="/settings"
+          href="/dashboard/settings"
           className={cn(
             'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 transition-colors',
-            pathname.startsWith('/settings') && 'bg-blue-50 text-blue-700'
+            pathname.startsWith('/dashboard/settings') && 'bg-blue-50 text-blue-700'
           )}
           title={collapsed ? 'Settings' : undefined}
         >
