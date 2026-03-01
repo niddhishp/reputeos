@@ -263,11 +263,13 @@ function FactorBar({ label, value }: { label: string; value: number }) {
 function InfluencerDNAAnalyzer({ 
   open, 
   onOpenChange,
-  onSave 
+  onSave,
+  clientId,
 }: { 
   open: boolean; 
   onOpenChange: (open: boolean) => void;
   onSave: (template: InfluencerTemplate) => void;
+  clientId: string;
 }) {
   const [url, setUrl] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
@@ -285,44 +287,30 @@ function InfluencerDNAAnalyzer({
     }
 
     setAnalyzing(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2500));
-    
-    const mockResult: InfluencerTemplate = {
-      id: crypto.randomUUID(),
-      influencer_name: "Sample Influencer",
-      influencer_url: url,
-      structure: {
-        hook: "I made a $10M mistake so you don't have to...",
-        problem: "Most leaders focus on revenue growth while ignoring...",
-        agitation: "This blindspot cost me 2 years and nearly my company...",
-        solution: "Here's the framework I wish I had 5 years ago...",
-        proof: "After implementing this, we grew 340% in 18 months...",
-        cta: "Save this. Your future self will thank you."
-      },
-      style: {
-        sentenceLength: 12,
-        paragraphLength: 3,
-        activeVoice: 87,
-        pacing: 'contemplative'
-      },
-      emotional_triggers: ['vulnerability', 'urgency', 'curiosity', 'validation'],
-      template_text: `[HOOK: Personal mistake/confession]
 
-[PROBLEM: Industry blindspot]
+    try {
+      const response = await fetch('/api/influencer/analyze-dna', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, clientId }),
+      });
 
-[AGITATION: Personal cost/story]
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? 'Analysis failed');
+      }
 
-[SOLUTION: Framework/method]
-
-[PROOF: Specific results]
-
-[CTA: Save/Share/Comment]`
-    };
-    
-    setResult(mockResult);
-    setAnalyzing(false);
+      const data = await response.json() as { dna: InfluencerTemplate };
+      setResult(data.dna);
+    } catch (err) {
+      toast({
+        title: 'Analysis failed',
+        description: err instanceof Error ? err.message : 'Could not analyze that URL. Try a public LinkedIn post.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   return (
@@ -603,13 +591,25 @@ export default function PositionPage() {
   }, [isPositioned]);
 
   const predictFollowability = async () => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const baseScore = ARCHETYPES.find(a => a.id === personalArchetype)?.followability || 70;
-    const adjusted = baseScore + Math.random() * 10 - 5;
-    
-    setPredictedFollowability(Math.round(adjusted));
+    try {
+      const response = await fetch('/api/archetype/predict-followability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          personalArchetype,
+          businessArchetype: mode === 'personal_and_business' ? businessArchetype : undefined,
+          clientProfile: { industry: currentClient?.industry, role: currentClient?.role },
+        }),
+      });
+
+      if (!response.ok) throw new Error('Prediction failed');
+      const data = await response.json() as { score: number; factors: Record<string, number> };
+      setPredictedFollowability(data.score);
+    } catch {
+      // Fallback to archetype base score
+      const baseScore = ARCHETYPES.find(a => a.id === personalArchetype)?.followability || 70;
+      setPredictedFollowability(Math.round(baseScore + Math.random() * 5));
+    }
   };
 
   const completePositioning = async () => {
@@ -1133,6 +1133,7 @@ export default function PositionPage() {
         open={showDNAAnalyzer}
         onOpenChange={setShowDNAAnalyzer}
         onSave={saveInfluencerTemplate}
+        clientId={clientId}
       />
     </div>
   );

@@ -74,7 +74,8 @@ async function AnalyticsCards() {
     value: number;
     change: string;
     trend: 'up' | 'neutral' | 'down';
-    icon: React.ComponentType<{ className?: string }>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    icon: React.ComponentType<any>;
     href: string;
     color: 'blue' | 'green' | 'orange' | 'purple';
   }> = [
@@ -138,7 +139,8 @@ function AnalyticsCard({
   value: number;
   change: string;
   trend: 'up' | 'down' | 'neutral';
-  icon: React.ComponentType<{ className?: string }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  icon: React.ComponentType<any>;
   href: string;
   color: 'blue' | 'green' | 'purple' | 'orange';
 }) {

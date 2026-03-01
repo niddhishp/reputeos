@@ -1,7 +1,7 @@
 // app/(dashboard)/clients/[id]/express/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
@@ -198,62 +198,51 @@ export default function ExpressPage() {
   const [showDecisionGate, setShowDecisionGate] = useState(!isPositioned);
   const [activeTab, setActiveTab] = useState('all');
 
-  // Mock content data
-  const contentItems: ContentItem[] = [
-    {
-      id: '1',
-      title: 'The Future of Sustainable Leadership: Beyond ESG',
-      excerpt: 'Why the next generation of leaders must move beyond compliance to genuine regenerative business models...',
-      platform: 'linkedin',
-      status: 'published',
-      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      publishedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      nlpCompliance: {
-        passed: true,
-        archetypeAlignment: 94,
-        frameCheck: true,
-        authorityMarkers: 3
-      },
-      performancePrediction: {
-        engagementRate: 4.2,
-        impressions: 12500
-      }
-    },
-    {
-      id: '2',
-      title: '3 Mistakes That Nearly Cost Me Everything',
-      excerpt: 'I was 6 months from bankruptcy. Here\'s what I learned and how it changed my approach to...',
-      platform: 'twitter',
-      status: 'draft',
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      nlpCompliance: {
-        passed: false,
-        archetypeAlignment: 68,
-        frameCheck: false,
-        authorityMarkers: 1
-      }
-    },
-    {
-      id: '3',
-      title: 'Why Traditional MBA Programs Are Failing Future Leaders',
-      excerpt: 'After interviewing 200+ CEOs, I\'ve identified the critical gap in modern business education...',
-      platform: 'medium',
-      status: 'scheduled',
-      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      nlpCompliance: {
-        passed: true,
-        archetypeAlignment: 89,
-        frameCheck: true,
-        authorityMarkers: 4
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [loadingContent, setLoadingContent] = useState(true);
+
+  // Load real content from Supabase
+  useEffect(() => {
+    async function loadContent() {
+      if (!clientId) return;
+      setLoadingContent(true);
+      try {
+        const { supabase } = await import('@/lib/supabase/client');
+        const { data, error } = await supabase
+          .from('content_items')
+          .select('id, title, body, platform, status, created_at, updated_at, published_at, nlp_compliance, performance_prediction')
+          .eq('client_id', clientId)
+          .order('updated_at', { ascending: false })
+          .limit(50);
+
+        if (error) throw error;
+
+        const items: ContentItem[] = (data ?? []).map((row: Record<string, unknown>) => ({
+          id: row.id as string,
+          title: (row.title as string | null) ?? 'Untitled',
+          excerpt: typeof row.body === 'string' ? (row.body as string).slice(0, 120) + '...' : '',
+          platform: (row.platform as ContentPlatform) ?? 'linkedin',
+          status: (row.status as ContentStatus) ?? 'draft',
+          createdAt: row.created_at as string,
+          updatedAt: row.updated_at as string,
+          publishedAt: (row.published_at as string | null) ?? undefined,
+          nlpCompliance: (row.nlp_compliance as ContentItem['nlpCompliance']) ?? {
+            passed: false, archetypeAlignment: 0, frameCheck: false, authorityMarkers: 0,
+          },
+          performancePrediction: row.performance_prediction as ContentItem['performancePrediction'],
+        }));
+        setContentItems(items);
+      } catch {
+        // Keep empty array on error — user will see empty state
+      } finally {
+        setLoadingContent(false);
       }
     }
-  ];
+    loadContent();
+  }, [clientId]);
 
-  const filteredContent = activeTab === 'all' 
-    ? contentItems 
+  const filteredContent = activeTab === 'all'
+    ? contentItems
     : contentItems.filter(c => c.status === activeTab);
 
   const handleCreateContent = () => {

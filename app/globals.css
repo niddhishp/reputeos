@@ -113,3 +113,51 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+
+/* ─── ReputeOS Brand Extension ───────────────────────────────────────── */
+/* Layered on top of the shadcn OKLCH system — do not remove above vars  */
+
+:root {
+  /* Brand Colors */
+  --brand-500: #0066CC;
+  --brand-600: #0052A3;
+  --brand-900: #102a43;
+
+  /* Gold accent */
+  --gold-400: #E8C97A;
+  --gold-500: #C9A84C;
+  --gold-600: #A8872E;
+
+  /* Semantic */
+  --success-500: #10B981;
+  --warning-500: #F59E0B;
+  --error-500: #EF4444;
+  --info-500: #3B82F6;
+
+  /* Elevation */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-modal: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-dropdown: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+  /* Animation */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Utility classes used by marketing pages ───────────────────── */
+.text-gold { color: var(--gold-500); }
+.bg-brand { background-color: var(--brand-500); }
+.border-gold { border-color: var(--gold-500); }
+
+/* ─── Focus ring accessibility ──────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+/* ─── Smooth scroll ─────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
