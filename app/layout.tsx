@@ -12,11 +12,18 @@ const inter = Inter({
   weight: ['400', '500', '600', '700'],
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const instrumentSerif = Instrument_Serif({
   subsets: ['latin'],
-  variable: '--font-mono',
+  variable: '--font-serif',
   display: 'swap',
-  weight: ['400', '500'],
+  weight: ['400'],
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-metrics',
+  display: 'swap',
+  weight: ['400', '500', '600', '700'],
 });
 
 export const viewport: Viewport = {
@@ -95,7 +102,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${inter.variable} ${instrumentSerif.variable} ${spaceGrotesk.variable}`}>
       <head>
         <OrganizationSchema />
         <SoftwareApplicationSchema />
