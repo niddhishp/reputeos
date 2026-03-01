@@ -1,84 +1,133 @@
 /**
  * Rate Limiting Configuration
- * 
- * This module provides rate limiting for API routes using Upstash Redis.
- * It includes different limiters for different types of operations.
+ *
+ * Redis and all Ratelimit instances are lazily created — NOT at module level —
+ * so Next.js build-time page collection doesn't crash when UPSTASH env vars
+ * are absent. Each getter throws a clear error if called without env vars.
+ *
+ * Usage in API routes:
+ *   import { getContentRateLimiter, getClientIP, createRateLimitResponse } from '@/lib/ratelimit'
+ *   const result = await getContentRateLimiter().limit(identifier)
  */
 
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
-import { env } from '@/lib/env';
 
-// Initialize Redis client
-const redis = Redis.fromEnv();
+// ─── Lazy Redis singleton ─────────────────────────────────────────────────────
+let _redis: Redis | null = null;
 
-/**
- * Standard API rate limiter: 100 requests per minute per IP
- * Use for general API endpoints
- */
-export const standardRateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(100, '1 m'),
-  analytics: true,
-  prefix: 'ratelimit:standard',
-});
+function getRedis(): Redis {
+  if (!_redis) {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-/**
- * Strict API rate limiter: 20 requests per minute per IP
- * Use for sensitive operations
- */
-export const strictRateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(20, '1 m'),
-  analytics: true,
-  prefix: 'ratelimit:strict',
-});
+    if (!url || !token) {
+      throw new Error(
+        'Upstash Redis is not configured. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in your environment variables. ' +
+        'Get free credentials at https://upstash.com'
+      );
+    }
 
-/**
- * AI rate limiter: 10 requests per minute per user
- * Use for AI-powered endpoints (OpenAI, Anthropic calls)
- */
-export const aiRateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(10, '1 m'),
-  analytics: true,
-  prefix: 'ratelimit:ai',
-});
+    _redis = new Redis({ url, token });
+  }
+  return _redis;
+}
 
-/**
- * Discovery scan rate limiter: 5 scans per hour per client
- * Use for the DISCOVER module scan endpoint
- */
-export const discoveryRateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(5, '1 h'),
-  analytics: true,
-  prefix: 'ratelimit:discovery',
-});
+// ─── Lazy Ratelimit singletons ────────────────────────────────────────────────
+let _standardRateLimiter: Ratelimit | null = null;
+let _strictRateLimiter: Ratelimit | null = null;
+let _aiRateLimiter: Ratelimit | null = null;
+let _discoveryRateLimiter: Ratelimit | null = null;
+let _lsiRateLimiter: Ratelimit | null = null;
+let _contentRateLimiter: Ratelimit | null = null;
 
-/**
- * LSI calculation rate limiter: 20 calculations per hour per client
- * Use for the DIAGNOSE module LSI calculation endpoint
- */
-export const lsiRateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(20, '1 h'),
-  analytics: true,
-  prefix: 'ratelimit:lsi',
-});
+export function getStandardRateLimiter(): Ratelimit {
+  if (!_standardRateLimiter) {
+    _standardRateLimiter = new Ratelimit({
+      redis: getRedis(),
+      limiter: Ratelimit.slidingWindow(100, '1 m'),
+      analytics: true,
+      prefix: 'ratelimit:standard',
+    });
+  }
+  return _standardRateLimiter;
+}
 
-/**
- * Content generation rate limiter: 30 generations per hour per client
- * Use for the EXPRESS module content generation endpoint
- */
-export const contentRateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(30, '1 h'),
-  analytics: true,
-  prefix: 'ratelimit:content',
-});
+export function getStrictRateLimiter(): Ratelimit {
+  if (!_strictRateLimiter) {
+    _strictRateLimiter = new Ratelimit({
+      redis: getRedis(),
+      limiter: Ratelimit.slidingWindow(20, '1 m'),
+      analytics: true,
+      prefix: 'ratelimit:strict',
+    });
+  }
+  return _strictRateLimiter;
+}
 
-// Rate limit result type
+export function getAiRateLimiter(): Ratelimit {
+  if (!_aiRateLimiter) {
+    _aiRateLimiter = new Ratelimit({
+      redis: getRedis(),
+      limiter: Ratelimit.slidingWindow(10, '1 m'),
+      analytics: true,
+      prefix: 'ratelimit:ai',
+    });
+  }
+  return _aiRateLimiter;
+}
+
+export function getDiscoveryRateLimiter(): Ratelimit {
+  if (!_discoveryRateLimiter) {
+    _discoveryRateLimiter = new Ratelimit({
+      redis: getRedis(),
+      limiter: Ratelimit.slidingWindow(5, '1 h'),
+      analytics: true,
+      prefix: 'ratelimit:discovery',
+    });
+  }
+  return _discoveryRateLimiter;
+}
+
+export function getLsiRateLimiter(): Ratelimit {
+  if (!_lsiRateLimiter) {
+    _lsiRateLimiter = new Ratelimit({
+      redis: getRedis(),
+      limiter: Ratelimit.slidingWindow(20, '1 h'),
+      analytics: true,
+      prefix: 'ratelimit:lsi',
+    });
+  }
+  return _lsiRateLimiter;
+}
+
+export function getContentRateLimiter(): Ratelimit {
+  if (!_contentRateLimiter) {
+    _contentRateLimiter = new Ratelimit({
+      redis: getRedis(),
+      limiter: Ratelimit.slidingWindow(30, '1 h'),
+      analytics: true,
+      prefix: 'ratelimit:content',
+    });
+  }
+  return _contentRateLimiter;
+}
+
+// ─── Backwards-compatible named exports (for routes that import the old names) ─
+/** @deprecated Use getStandardRateLimiter() */
+export const standardRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getStandardRateLimiter()[p as keyof Ratelimit] });
+/** @deprecated Use getStrictRateLimiter() */
+export const strictRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getStrictRateLimiter()[p as keyof Ratelimit] });
+/** @deprecated Use getAiRateLimiter() */
+export const aiRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getAiRateLimiter()[p as keyof Ratelimit] });
+/** @deprecated Use getDiscoveryRateLimiter() */
+export const discoveryRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getDiscoveryRateLimiter()[p as keyof Ratelimit] });
+/** @deprecated Use getLsiRateLimiter() */
+export const lsiRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getLsiRateLimiter()[p as keyof Ratelimit] });
+/** @deprecated Use getContentRateLimiter() */
+export const contentRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getContentRateLimiter()[p as keyof Ratelimit] });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 export interface RateLimitResult {
   success: boolean;
   limit: number;
@@ -86,15 +135,11 @@ export interface RateLimitResult {
   reset: number;
 }
 
-/**
- * Check rate limit for a given identifier
- */
 export async function checkRateLimit(
   limiter: Ratelimit,
   identifier: string
 ): Promise<RateLimitResult> {
   const result = await limiter.limit(identifier);
-  
   return {
     success: result.success,
     limit: result.limit,
@@ -103,32 +148,15 @@ export async function checkRateLimit(
   };
 }
 
-/**
- * Get the client IP from a request
- */
 export function getClientIP(request: Request): string {
-  // Try to get the forwarded IP first (for proxies/load balancers)
   const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-
-  // Fall back to the direct connection IP
+  if (forwarded) return forwarded.split(',')[0].trim();
   const realIP = request.headers.get('x-real-ip');
-  if (realIP) {
-    return realIP;
-  }
-
-  // Default to localhost if no IP is found
+  if (realIP) return realIP;
   return '127.0.0.1';
 }
 
-/**
- * Create a rate limit response
- */
-export function createRateLimitResponse(
-  result: RateLimitResult
-): Response {
+export function createRateLimitResponse(result: RateLimitResult): Response {
   return new Response(
     JSON.stringify({
       error: 'Rate limit exceeded',
@@ -147,38 +175,4 @@ export function createRateLimitResponse(
       },
     }
   );
-}
-
-/**
- * Higher-order function to wrap API routes with rate limiting
- */
-export function withRateLimit(
-  handler: (request: Request) => Promise<Response>,
-  limiter: Ratelimit,
-  getIdentifier?: (request: Request) => string
-) {
-  return async (request: Request): Promise<Response> => {
-    const identifier = getIdentifier 
-      ? getIdentifier(request) 
-      : getClientIP(request);
-
-    const result = await checkRateLimit(limiter, identifier);
-
-    if (!result.success) {
-      return createRateLimitResponse(result);
-    }
-
-    // Add rate limit headers to the response
-    const response = await handler(request);
-    const newHeaders = new Headers(response.headers);
-    newHeaders.set('X-RateLimit-Limit', String(result.limit));
-    newHeaders.set('X-RateLimit-Remaining', String(result.remaining));
-    newHeaders.set('X-RateLimit-Reset', String(result.reset));
-
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: newHeaders,
-    });
-  };
 }

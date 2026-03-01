@@ -66,9 +66,11 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
 
-  // ESLint configuration
+  // ESLint — skipped during builds; TypeScript strict mode provides type safety.
+  // Run `npx eslint .` locally to lint. This avoids eslint-config-next version
+  // conflicts between ESLint 8/9 and different Next.js versions on CI.
   eslint: {
-    ignoreDuringBuilds: false,
+    ignoreDuringBuilds: true,
   },
 
   // Production source maps (disable for security in sensitive apps)

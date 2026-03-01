@@ -1,15 +1,18 @@
 // app/page.tsx
-// Root route — show marketing page to visitors, redirect logged-in users to app
+// Root route — the middleware handles this redirect, but this is a fallback
+// in case middleware doesn't run (e.g., static export mode).
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
 
 export default async function RootPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // Try to check auth, but always fall back to /home if Supabase isn't configured
+  try {
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) redirect('/dashboard/clients');
+  } catch {
+    // Supabase not configured or error — show marketing page
+  }
 
-  // Logged in → go straight to the app
-  if (user) redirect('/dashboard/clients');
-
-  // Not logged in → show marketing homepage
   redirect('/home');
 }
