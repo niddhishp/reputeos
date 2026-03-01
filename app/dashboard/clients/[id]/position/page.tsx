@@ -1,1140 +1,514 @@
-// app/(dashboard)/clients/[id]/position/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Lock, 
-  TrendingUp, 
-  Users, 
-  Sparkles, 
-  CheckCircle2, 
-  AlertTriangle,
-  Plus,
-  RefreshCw,
-  Target,
-  ArrowRight,
-  Copy,
-  Save,
-  Wand2,
-  ChevronRight,
-  BarChart3,
-  Shield,
-  Zap
+import {
+  Sparkles, RefreshCw, AlertTriangle, Lock, ArrowRight,
+  CheckCircle, Copy, Target, Users, Zap, BarChart3, BookOpen,
+  ChevronDown, ChevronUp, Shield,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { supabase } from '@/lib/supabase/client';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/components/ui/use-toast';
+const GOLD   = '#C9A84C';
+const CARD   = '#0d1117';
+const BORDER = 'rgba(201,168,76,0.15)';
 
-import { cn } from '@/lib/utils';
-import { useClientStore } from '@/store/client-store';
-import { usePositioningStore } from '@/store/positioning-store';
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-// Archetype data structure
-interface Archetype {
+interface Positioning {
   id: string;
-  name: string;
-  tier: 'jungian' | 'professional' | 'niche';
-  category: string;
-  description: string;
-  traits: string[];
-  voice: string;
-  compatible: string[];
-  incompatible: string[];
-  followability: number;
-  icon: string;
-}
-
-// Influencer Template
-interface InfluencerTemplate {
-  id: string;
-  influencer_name: string;
-  influencer_url: string;
-  structure: {
-    hook: string;
-    problem: string;
-    agitation: string;
-    solution: string;
-    proof: string;
-    cta: string;
-  };
-  style: {
-    sentenceLength: number;
-    paragraphLength: number;
-    activeVoice: number;
-    pacing: 'fast' | 'contemplative';
-  };
-  emotional_triggers: string[];
-  template_text: string;
-}
-
-// Content Pillar
-interface ContentPillar {
-  name: string;
-  themes: string[];
-  frequency: string;
-  formats: string[];
-}
-
-// Target Influencer
-interface TargetInfluencer {
-  name: string;
-  archetype: string;
-  platforms: string[];
-  strategy: string;
-}
-
-// Positioning State
-interface PositioningData {
-  id: string;
-  mode: 'personal_only' | 'personal_and_business';
+  client_id: string;
+  mode: string;
   personal_archetype: string;
   business_archetype?: string;
   archetype_confidence: number;
   followability_score: number;
-  followability_factors: {
-    uniqueness: number;
-    emotionalResonance: number;
-    contentOpportunity: number;
-    platformFit: number;
-    historicalPerformance: number;
-  };
+  followability_factors: Record<string, number>;
   positioning_statement: string;
-  content_pillars: ContentPillar[];
+  content_pillars: Array<{
+    name: string; themes: string[]; frequency: string; formats: string[];
+  }>;
   signature_lines: string[];
-  target_influencers: TargetInfluencer[];
-  ab_test_active: boolean;
+  target_influencers: Array<{ name: string; archetype: string; platforms: string[]; strategy: string }>;
+  root_cause_insights?: string[];
+  strategic_insights?: string[];
+  updated_at: string;
 }
 
-// Archetype Library (54 total - subset shown for brevity)
-const ARCHETYPES: Archetype[] = [
-  // Jungian Core (12)
-  { id: 'sage', name: 'The Sage', tier: 'jungian', category: 'Knowledge', description: 'Seeks truth and understanding above all', traits: ['Analytical', 'Objective', 'Expert'], voice: 'Authoritative, precise, evidence-based', compatible: ['maven', 'visionary'], incompatible: ['jester', 'everyman'], followability: 78, icon: '📚' },
-  { id: 'explorer', name: 'The Explorer', tier: 'jungian', category: 'Freedom', description: 'Pushes boundaries and discovers new paths', traits: ['Adventurous', 'Independent', 'Authentic'], voice: 'Curious, bold, experiential', compatible: ['pioneer', 'rebel'], incompatible: ['caregiver', 'ruler'], followability: 72, icon: '🧭' },
-  { id: 'rebel', name: 'The Rebel', tier: 'jungian', category: 'Liberation', description: 'Challenges status quo and breaks rules', traits: ['Disruptive', 'Fearless', 'Radical'], voice: 'Provocative, direct, unapologetic', compatible: ['maverick', 'explorer'], incompatible: ['ruler', 'caregiver'], followability: 75, icon: '⚡' },
-  { id: 'magician', name: 'The Magician', tier: 'jungian', category: 'Power', description: 'Transforms reality and makes things happen', traits: ['Visionary', 'Charismatic', 'Transformative'], voice: 'Inspiring, mysterious, empowering', compatible: ['visionary', 'alchemist'], incompatible: ['everyman', 'sage'], followability: 82, icon: '🔮' },
-  { id: 'hero', name: 'The Hero', tier: 'jungian', category: 'Mastery', description: 'Overcomes obstacles and proves worth', traits: ['Courageous', 'Disciplined', 'Competitive'], voice: 'Motivational, determined, action-oriented', compatible: ['warrior', 'champion'], incompatible: ['caregiver', 'innocent'], followability: 80, icon: '🛡️' },
-  { id: 'caregiver', name: 'The Caregiver', tier: 'jungian', category: 'Service', description: 'Protects and cares for others', traits: ['Compassionate', 'Generous', 'Nurturing'], voice: 'Warm, supportive, empathetic', compatible: ['healer', 'guardian'], incompatible: ['rebel', 'trickster'], followability: 68, icon: '❤️' },
-  { id: 'ruler', name: 'The Ruler', tier: 'jungian', category: 'Control', description: 'Creates order and prosperity', traits: ['Responsible', 'Commanding', 'Organized'], voice: 'Decisive, structured, leadership-focused', compatible: ['sovereign', 'architect'], incompatible: ['rebel', 'jester'], followability: 74, icon: '👑' },
-  { id: 'jester', name: 'The Jester', tier: 'jungian', category: 'Enjoyment', description: 'Brings joy and humor to life', traits: ['Playful', 'Spontaneous', 'Humorous'], voice: 'Witty, light, entertaining', compatible: ['entertainer', 'provocateur'], incompatible: ['ruler', 'sage'], followability: 70, icon: '🃏' },
-  { id: 'everyman', name: 'The Everyman', tier: 'jungian', category: 'Belonging', description: 'Connects with others through shared experience', traits: ['Relatable', 'Humble', 'Realistic'], voice: 'Conversational, down-to-earth, accessible', compatible: ['companion', 'neighbor'], incompatible: ['magician', 'ruler'], followability: 65, icon: '🤝' },
-  { id: 'lover', name: 'The Lover', tier: 'jungian', category: 'Intimacy', description: 'Creates relationships and inspires passion', traits: ['Passionate', 'Committed', 'Appreciative'], voice: 'Sensual, warm, relationship-focused', compatible: ['partner', 'aesthete'], incompatible: ['sage', 'rebel'], followability: 71, icon: '💕' },
-  { id: 'creator', name: 'The Creator', tier: 'jungian', category: 'Innovation', description: 'Imagines and builds new things', traits: ['Imaginative', 'Original', 'Expressive'], voice: 'Visionary, artistic, detail-oriented', compatible: ['artist', 'maker'], incompatible: ['everyman', 'caregiver'], followability: 76, icon: '🎨' },
-  { id: 'innocent', name: 'The Innocent', tier: 'jungian', category: 'Safety', description: 'Seeks happiness and does things right', traits: ['Optimistic', 'Honest', 'Pure'], voice: 'Simple, hopeful, trustworthy', compatible: ['dreamer', 'idealist'], incompatible: ['rebel', 'magician'], followability: 63, icon: '🌟' },
-  
-  // Professional (21) - subset
-  { id: 'maven', name: 'The Maven', tier: 'professional', category: 'Expertise', description: 'Accumulates deep knowledge and shares generously', traits: ['Knowledgeable', 'Generous', 'Connected'], voice: 'Educational, detailed, generous', compatible: ['sage', 'teacher'], incompatible: ['trickster'], followability: 81, icon: '🎓' },
-  { id: 'visionary', name: 'The Visionary', tier: 'professional', category: 'Leadership', description: 'Sees future possibilities and inspires others', traits: ['Forward-thinking', 'Inspiring', 'Strategic'], voice: 'Big-picture, inspiring, conceptual', compatible: ['magician', 'explorer'], incompatible: ['bureaucrat'], followability: 85, icon: '🔭' },
-  { id: 'pioneer', name: 'The Pioneer', tier: 'professional', category: 'Innovation', description: 'First to explore new territories', traits: ['Bold', 'Innovative', 'Resilient'], voice: 'Adventurous, risk-taking, inspiring', compatible: ['explorer', 'founder'], incompatible: ['guardian'], followability: 79, icon: '🚀' },
-  { id: 'architect', name: 'The Architect', tier: 'professional', category: 'Design', description: 'Designs systems and structures', traits: ['Systematic', 'Precise', 'Innovative'], voice: 'Technical, structured, elegant', compatible: ['ruler', 'creator'], incompatible: ['jester'], followability: 77, icon: '🏗️' },
-  
-  // Niche (21) - subset
-  { id: 'disruptor', name: 'The Disruptor', tier: 'niche', category: 'Change', description: 'Fundamentally changes how things work', traits: ['Revolutionary', 'Fearless', 'Systematic'], voice: 'Challenging, analytical, bold', compatible: ['rebel', 'pioneer'], incompatible: ['ruler', 'guardian'], followability: 83, icon: '💥' },
-  { id: 'alchemist', name: 'The Alchemist', tier: 'niche', category: 'Transformation', description: 'Turns the ordinary into extraordinary', traits: ['Transformative', 'Mysterious', 'Powerful'], voice: 'Metaphorical, transformative, deep', compatible: ['magician', 'visionary'], incompatible: ['skeptic'], followability: 80, icon: '⚗️' },
-];
-
-// Archetype Selection Card Component
-function ArchetypeCard({ 
-  archetype, 
-  selected, 
-  onClick 
-}: { 
-  archetype: Archetype; 
-  selected: boolean; 
-  onClick: () => void; 
-}) {
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
-      className={cn(
-        "cursor-pointer rounded-xl border-2 p-4 transition-all duration-150",
-        selected 
-          ? "border-primary-500 bg-primary-50 shadow-md" 
-          : "border-neutral-200 bg-white hover:border-primary-300 hover:shadow-sm"
-      )}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-2xl">{archetype.icon}</span>
-        <Badge variant={selected ? "default" : "secondary"} className="text-xs">
-          {archetype.tier}
-        </Badge>
-      </div>
-      <h4 className="text-heading-sm font-semibold text-neutral-900 mb-1">
-        {archetype.name}
-      </h4>
-      <p className="text-caption text-neutral-500 mb-3 line-clamp-2">
-        {archetype.description}
-      </p>
-      <div className="flex items-center justify-between">
-        <div className="flex flex-wrap gap-1">
-          {archetype.traits.slice(0, 2).map(trait => (
-            <span key={trait} className="text-caption bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full">
-              {trait}
-            </span>
-          ))}
-        </div>
-        <div className="text-body-sm font-medium text-primary-600">
-          {archetype.followability}%
-        </div>
-      </div>
-    </motion.div>
-  );
+interface Client {
+  name: string; industry: string; role: string; company: string; baseline_lsi: number;
 }
 
-// Followability Prediction Display
-function FollowabilityPrediction({ 
-  score, 
-  factors 
-}: { 
-  score: number; 
-  factors: PositioningData['followability_factors']; 
-}) {
-  const getLabel = (s: number) => {
-    if (s >= 85) return { text: 'Exceptional', color: 'bg-success-500' };
-    if (s >= 70) return { text: 'Strong', color: 'bg-primary-500' };
-    if (s >= 55) return { text: 'Moderate', color: 'bg-warning-500' };
-    return { text: 'Challenging', color: 'bg-error-500' };
-  };
-
-  const label = getLabel(score);
-
-  return (
-    <Card className="bg-gradient-to-br from-primary-50 to-white border-primary-100">
-      <CardContent className="p-6">
-        <div className="text-center mb-6">
-          <div className="text-display-md text-primary-600 font-bold">
-            {score}%
-          </div>
-          <p className="text-body text-neutral-600 mt-1">Predicted Followability</p>
-          <Badge className={cn("mt-2 text-white", label.color)}>
-            {label.text}
-          </Badge>
-        </div>
-
-        <div className="space-y-3">
-          <FactorBar label="Uniqueness" value={factors.uniqueness} />
-          <FactorBar label="Emotional Resonance" value={factors.emotionalResonance} />
-          <FactorBar label="Content Opportunity" value={factors.contentOpportunity} />
-          <FactorBar label="Platform Fit" value={factors.platformFit} />
-          <FactorBar label="Historical Performance" value={factors.historicalPerformance} />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function FactorBar({ label, value }: { label: string; value: number }) {
+  const colors: Record<string, string> = {
+    uniqueness: '#818cf8', emotionalResonance: '#f472b6',
+    contentOpportunity: '#34d399', platformFit: '#60a5fa', historicalPerformance: '#fb923c',
+  };
+  const color = colors[label] || GOLD;
+  const nice  = label.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
   return (
-    <div>
-      <div className="flex justify-between mb-1">
-        <span className="text-body-sm text-neutral-600">{label}</span>
-        <span className="text-body-sm font-medium text-neutral-900">{value}%</span>
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{nice}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color }}>{value}%</span>
       </div>
-      <div className="h-2 bg-neutral-200 rounded-full overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${value}%` }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="h-full bg-primary-500 rounded-full"
-        />
+      <div style={{ height: 5, background: 'rgba(255,255,255,0.07)', borderRadius: 3 }}>
+        <div style={{ height: '100%', width: `${value}%`, background: color, borderRadius: 3, transition: 'width 0.8s ease' }} />
       </div>
     </div>
   );
 }
 
-// Influencer DNA Analyzer Dialog
-function InfluencerDNAAnalyzer({ 
-  open, 
-  onOpenChange,
-  onSave,
-  clientId,
-}: { 
-  open: boolean; 
-  onOpenChange: (open: boolean) => void;
-  onSave: (template: InfluencerTemplate) => void;
-  clientId: string;
+function PillarCard({ pillar, i }: { pillar: Positioning['content_pillars'][0]; i: number }) {
+  const [open, setOpen] = useState(i === 0);
+  const colors = ['#818cf8', '#34d399', '#60a5fa', '#f472b6', '#fb923c'];
+  const color  = colors[i % colors.length];
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', padding: '14px 18px', background: 'transparent', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'white' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{pillar.name}</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', border: `1px solid ${BORDER}`, padding: '2px 8px', borderRadius: 12 }}>{pillar.frequency}</span>
+        </div>
+        {open ? <ChevronUp size={14} color="rgba(255,255,255,0.4)" /> : <ChevronDown size={14} color="rgba(255,255,255,0.4)" />}
+      </button>
+      {open && (
+        <div style={{ padding: '0 18px 16px', borderTop: `1px solid ${BORDER}` }}>
+          <div style={{ marginTop: 12, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Themes</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {pillar.themes.map((t, j) => (
+                <span key={j} style={{ padding: '3px 9px', borderRadius: 16, background: `${color}15`, border: `1px solid ${color}30`, fontSize: 12, color }}>{t}</span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Formats</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {pillar.formats.map((f, j) => (
+                <span key={j} style={{ padding: '3px 9px', borderRadius: 16, background: 'rgba(255,255,255,0.05)', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{f}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <button onClick={copy} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 6px', borderRadius: 6, color: copied ? '#4ade80' : 'rgba(255,255,255,0.3)' }}>
+      {copied ? <CheckCircle size={13} /> : <Copy size={13} />}
+    </button>
+  );
+}
+
+// ─── Run AI Analysis Panel ────────────────────────────────────────────────────
+
+function RunAnalysisPanel({ clientId, hasDiscover, hasLSI, onComplete }: {
+  clientId: string; hasDiscover: boolean; hasLSI: boolean; onComplete: () => void;
 }) {
-  const [url, setUrl] = useState('');
-  const [analyzing, setAnalyzing] = useState(false);
-  const [result, setResult] = useState<InfluencerTemplate | null>(null);
-  const { toast } = useToast();
+  const [running, setRunning] = useState(false);
+  const [error,   setError]   = useState('');
+  const [step,    setStep]    = useState('');
 
-  const analyzeContent = async () => {
-    if (!url.includes('linkedin.com') && !url.includes('twitter.com') && !url.includes('x.com')) {
-      toast({
-        title: "Invalid URL",
-        description: "Please provide a LinkedIn or X/Twitter URL",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setAnalyzing(true);
+  async function runAnalysis() {
+    if (!hasDiscover) return;
+    setRunning(true); setError(''); setStep('');
 
     try {
-      const response = await fetch('/api/influencer/analyze-dna', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, clientId }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? 'Analysis failed');
+      // Step 1: LSI if not done
+      if (!hasLSI) {
+        setStep('Calculating LSI from scan data…');
+        const lsiRes = await fetch('/api/lsi/calculate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId }),
+        });
+        if (!lsiRes.ok) { const d = await lsiRes.json(); throw new Error(d.message || 'LSI failed'); }
       }
 
-      const data = await response.json() as { dna: InfluencerTemplate };
-      setResult(data.dna);
-    } catch (err) {
-      toast({
-        title: 'Analysis failed',
-        description: err instanceof Error ? err.message : 'Could not analyze that URL. Try a public LinkedIn post.',
-        variant: 'destructive',
+      // Step 2: Archetype assignment
+      setStep('Running AI archetype analysis…');
+      const arcRes = await fetch('/api/archetype/assign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
       });
+      if (!arcRes.ok) { const d = await arcRes.json(); throw new Error(d.message || 'Archetype analysis failed'); }
+
+      setStep('Saving positioning strategy…');
+      await new Promise(r => setTimeout(r, 800));
+      onComplete();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Analysis failed');
     } finally {
-      setAnalyzing(false);
+      setRunning(false); setStep('');
     }
-  };
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-heading-lg flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary-600" />
-            Influencer Content DNA Analyzer
-          </DialogTitle>
-          <DialogDescription className="text-body text-neutral-600">
-            Extract the exact structure, style, and emotional triggers from any influencer's content.
-          </DialogDescription>
-        </DialogHeader>
+    <div style={{ textAlign: 'center', padding: '80px 24px', maxWidth: 520, margin: '0 auto' }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
 
-        {!result ? (
-          <div className="space-y-4 py-4">
-            <div>
-              <Label className="text-label">Influencer Content URL</Label>
-              <Input
-                placeholder="https://linkedin.com/posts/..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="mt-1.5"
-              />
-              <p className="text-caption text-neutral-500 mt-1.5">
-                LinkedIn post, X/Twitter thread, or Medium article
-              </p>
-            </div>
-            
-            <Button 
-              onClick={analyzeContent} 
-              disabled={analyzing || !url}
-              className="w-full"
-              size="lg"
-            >
-              {analyzing ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing Content DNA...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Extract DNA
-                </>
-              )}
-            </Button>
+      {!hasDiscover ? (
+        <>
+          <Sparkles size={44} color={GOLD} style={{ margin: '0 auto 20px', display: 'block', opacity: 0.5 }} />
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'white', marginBottom: 8 }}>Run Discovery First</h2>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 28, lineHeight: 1.6 }}>
+            Position uses your 62-source scan data to assign your archetype. Complete Discovery first.
+          </p>
+          <a href="discover" style={{ padding: '12px 26px', borderRadius: 8, background: GOLD, color: '#080C14', fontWeight: 700, fontSize: 14, textDecoration: 'none', display: 'inline-block' }}>
+            Go to Discover →
+          </a>
+        </>
+      ) : (
+        <>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: `${GOLD}15`, border: `2px solid ${GOLD}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+            <Sparkles size={28} color={GOLD} />
           </div>
-        ) : (
-          <div className="space-y-6 py-4">
-            {/* Structure Analysis */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-heading-sm">Structure Analysis</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {Object.entries(result.structure).map(([key, value]) => (
-                  <div key={key}>
-                    <dt className="text-label text-neutral-500 uppercase text-xs mb-1">{key}</dt>
-                    <dd className="text-body-sm text-neutral-900 font-mono bg-neutral-50 p-2 rounded border border-neutral-200">
-                      {value}
-                    </dd>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 10 }}>Archetype Analysis</h2>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 8, lineHeight: 1.7 }}>
+            AI will analyse your 62-source scan data to assign your optimal Jungian character archetype, business archetype, followability score, 5 content pillars, and strategic insights.
+          </p>
+          <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginBottom: 32 }}>
+            ~30–45 seconds · Uses GPT-4o
+          </p>
 
-            {/* Style Analysis */}
-            <div className="grid grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-heading-sm">Style Metrics</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-body-sm text-neutral-600">Avg Sentence Length</span>
-                    <span className="text-body-sm font-medium">{result.style.sentenceLength} words</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-body-sm text-neutral-600">Paragraph Length</span>
-                    <span className="text-body-sm font-medium">{result.style.paragraphLength} sentences</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-body-sm text-neutral-600">Active Voice</span>
-                    <span className="text-body-sm font-medium">{result.style.activeVoice}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-body-sm text-neutral-600">Pacing</span>
-                    <Badge variant="outline">{result.style.pacing}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-heading-sm">Emotional Triggers</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {result.emotional_triggers.map(trigger => (
-                      <Badge key={trigger} variant="secondary" className="capitalize">
-                        {trigger}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+          {error && (
+            <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, padding: '10px 16px', marginBottom: 20, color: '#f87171', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={14} /> {error}
             </div>
+          )}
 
-            {/* Template */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-heading-sm">Reusable Template</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(result.template_text)}>
-                  <Copy className="h-3 w-3 mr-1" />
-                  Copy
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <pre className="text-body-sm font-mono bg-neutral-900 text-neutral-100 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">
-                  {result.template_text}
-                </pre>
-              </CardContent>
-            </Card>
-
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setResult(null)}>
-                Analyze Another
-              </Button>
-              <Button onClick={() => { onSave(result); onOpenChange(false); }}>
-                <Save className="mr-2 h-4 w-4" />
-                Save to Library
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Archetype Evolution Dialog
-function ArchetypeEvolutionDialog({
-  open,
-  onOpenChange,
-  currentArchetype,
-  onEvolve
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  currentArchetype: string;
-  onEvolve: (mode: 'add' | 'replace', archetype: string) => void;
-}) {
-  const [mode, setMode] = useState<'add' | 'replace'>('add');
-  const [selectedArchetype, setSelectedArchetype] = useState('');
-  
-  const current = ARCHETYPES.find(a => a.id === currentArchetype);
-  const compatible = current ? ARCHETYPES.filter(a => current.compatible.includes(a.id)) : [];
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="text-heading-lg">Archetype Evolution Strategy</DialogTitle>
-          <DialogDescription>
-            Current archetype not performing? Add a secondary or replace entirely.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Tabs value={mode} onValueChange={(v) => setMode(v as 'add' | 'replace')} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="add">ADD Secondary</TabsTrigger>
-            <TabsTrigger value="replace">REPLACE Primary</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="add" className="space-y-4 mt-4">
-            <Alert className="bg-info-50 border-info-200">
-              <AlertTitle className="text-info-800">Adding Complexity</AlertTitle>
-              <AlertDescription className="text-info-700">
-                Adding a secondary archetype increases complexity but can boost followability by 8-15 points.
-              </AlertDescription>
-            </Alert>
-
-            <div className="grid grid-cols-2 gap-3">
-              {compatible.map(archetype => (
-                <ArchetypeCard
-                  key={archetype.id}
-                  archetype={archetype}
-                  selected={selectedArchetype === archetype.id}
-                  onClick={() => setSelectedArchetype(archetype.id)}
-                />
-              ))}
+          {running && step && (
+            <div style={{ color: GOLD, fontSize: 13, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', animation: 'pulse 1.5s ease-in-out infinite' }}>
+              <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> {step}
             </div>
+          )}
 
-            {selectedArchetype && (
-              <Card className="bg-success-50 border-success-200 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-body-sm text-success-800 font-medium">Predicted Improvement</p>
-                    <p className="text-heading-md text-success-900 font-bold">+12% Followability</p>
-                  </div>
-                  <ArrowRight className="h-5 w-5 text-success-600" />
-                </div>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="replace" className="space-y-4 mt-4">
-            <Alert className="bg-warning-50 border-warning-200">
-              <AlertTriangle className="h-4 w-4 text-warning-600" />
-              <AlertTitle className="text-warning-800">Major Change</AlertTitle>
-              <AlertDescription className="text-warning-700">
-                Replacing your primary archetype resets your content strategy. Use with caution.
-              </AlertDescription>
-            </Alert>
-
-            <div className="grid grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
-              {ARCHETYPES.map(archetype => (
-                <ArchetypeCard
-                  key={archetype.id}
-                  archetype={archetype}
-                  selected={selectedArchetype === archetype.id}
-                  onClick={() => setSelectedArchetype(archetype.id)}
-                />
-              ))}
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button 
-            disabled={!selectedArchetype}
-            onClick={() => onEvolve(mode, selectedArchetype)}
+          <button
+            onClick={runAnalysis}
+            disabled={running}
+            style={{
+              padding: '14px 32px', borderRadius: 8,
+              background: running ? 'rgba(201,168,76,0.4)' : GOLD,
+              color: '#080C14', fontWeight: 700, fontSize: 15, border: 'none',
+              cursor: running ? 'wait' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+            }}
           >
-            {mode === 'add' ? 'Add Secondary Archetype' : 'Replace Primary'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            {running
+              ? <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Analysing…</>
+              : <><Sparkles size={16} /> Run AI Analysis</>}
+          </button>
+
+          <div style={{ marginTop: 32, display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {['Jungian Archetype', 'Business Archetype', 'Followability Score', '5 Content Pillars', 'Signature Lines', 'Strategic Insights'].map(item => (
+              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: GOLD }} /> {item}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
-// Main Position Page Component
+// ─── Positioning Display ──────────────────────────────────────────────────────
+
+function PositioningDisplay({ pos, clientId, onRerun }: {
+  pos: Positioning; clientId: string; onRerun: () => void;
+}) {
+  const router  = useRouter();
+  const factors = pos.followability_factors ?? {};
+  const fl      = pos.followability_score ?? 0;
+  const flColor = fl >= 80 ? '#4ade80' : fl >= 65 ? GOLD : '#fb923c';
+  const flLabel = fl >= 80 ? 'Exceptional' : fl >= 65 ? 'Strong' : 'Moderate';
+
+  const insights: string[]    = pos.strategic_insights ?? [];
+  const rootCause: string[]   = pos.root_cause_insights ?? [];
+
+  return (
+    <div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <Lock size={14} color="#4ade80" />
+            <span style={{ fontSize: 12, color: '#4ade80', fontWeight: 600 }}>STRATEGIC LOCK ACTIVE</span>
+          </div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>Position</h1>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 3 }}>
+            Archetype · Followability · Content Strategy · Insights
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={onRerun} style={{
+            padding: '9px 16px', borderRadius: 8, border: `1px solid ${BORDER}`,
+            background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: 13, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <RefreshCw size={13} /> Re-run Analysis
+          </button>
+          <button onClick={() => router.push(`/dashboard/clients/${clientId}/express`)} style={{
+            padding: '9px 18px', borderRadius: 8, background: GOLD,
+            color: '#080C14', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            Create Content <ArrowRight size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Archetype hero */}
+      <div style={{
+        background: `linear-gradient(135deg, rgba(201,168,76,0.12) 0%, rgba(13,17,23,0.9) 100%)`,
+        border: `1px solid ${BORDER}`, borderRadius: 14, padding: '28px 32px', marginBottom: 20,
+        display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', gap: 24, alignItems: 'start',
+      }}>
+        {/* Personal archetype */}
+        <div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Character Archetype</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: GOLD, marginBottom: 6 }}>
+            {pos.personal_archetype}
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', border: `1px solid ${BORDER}`, display: 'inline-block', padding: '2px 8px', borderRadius: 10 }}>
+            {pos.mode === 'personal_only' ? 'Personal Only' : 'Personal'}
+          </div>
+        </div>
+
+        <div style={{ width: 1, height: 60, background: BORDER, alignSelf: 'center' }} />
+
+        {/* Business archetype */}
+        <div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Business Archetype</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'white', marginBottom: 6 }}>
+            {pos.business_archetype || <span style={{ color: 'rgba(255,255,255,0.3)', fontStyle: 'italic', fontSize: 14 }}>Personal only</span>}
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+            Confidence: {pos.archetype_confidence}%
+          </div>
+        </div>
+
+        <div style={{ width: 1, height: 60, background: BORDER, alignSelf: 'center' }} />
+
+        {/* Followability */}
+        <div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Followability Score</div>
+          <div style={{ fontSize: 36, fontWeight: 900, color: flColor, lineHeight: 1 }}>{fl}%</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: flColor, marginTop: 4 }}>{flLabel}</div>
+        </div>
+      </div>
+
+      {/* Positioning statement */}
+      {pos.positioning_statement && (
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '20px 24px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Positioning Statement</div>
+            <p style={{ fontSize: 15, fontStyle: 'italic', color: 'rgba(255,255,255,0.85)', lineHeight: 1.65 }}>"{pos.positioning_statement}"</p>
+          </div>
+          <CopyButton text={pos.positioning_statement} />
+        </div>
+      )}
+
+      {/* Followability factors + signature lines */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 22 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Followability Factors</h3>
+          {Object.entries(factors).map(([k, v]) => <FactorBar key={k} label={k} value={typeof v === 'number' ? v : 0} />)}
+        </div>
+
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 22 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Signature Lines</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(pos.signature_lines ?? []).map((line, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: `1px solid ${BORDER}` }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: GOLD, marginTop: 6, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', flex: 1, lineHeight: 1.5 }}>{line}</span>
+                <CopyButton text={line} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content pillars */}
+      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 22, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Content Pillars</h3>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{(pos.content_pillars ?? []).length} pillars defined</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(pos.content_pillars ?? []).map((p, i) => <PillarCard key={i} pillar={p} i={i} />)}
+        </div>
+      </div>
+
+      {/* Strategic insights */}
+      {insights.length > 0 && (
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 22, marginBottom: 20 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Target size={14} /> Strategic Insights
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {insights.map((ins, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: `${GOLD}08`, border: `1px solid ${GOLD}25`, borderRadius: 8 }}>
+                <div style={{ minWidth: 22, height: 22, borderRadius: '50%', background: `${GOLD}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: GOLD }}>{i + 1}</span>
+                </div>
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.6 }}>{ins}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Root cause insights */}
+      {rootCause.length > 0 && (
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 22, marginBottom: 20 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, color: '#fb923c', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <BarChart3 size={14} /> Root Cause Analysis
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {rootCause.map((rc, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'rgba(251,146,60,0.05)', border: '1px solid rgba(251,146,60,0.2)', borderRadius: 8 }}>
+                <AlertTriangle size={13} color="#fb923c" style={{ flexShrink: 0, marginTop: 2 }} />
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.6 }}>{rc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Target influencers */}
+      {(pos.target_influencers ?? []).length > 0 && (
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 22, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Users size={14} /> Target Influencers
+            </h3>
+            <button
+              onClick={() => router.push(`/dashboard/clients/${clientId}/position/influencers`)}
+              style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${BORDER}`, background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer' }}
+            >
+              Analyse DNA →
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            {pos.target_influencers.map((inf, i) => (
+              <div key={i} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'white', marginBottom: 4 }}>{inf.name}</div>
+                <div style={{ fontSize: 11, color: GOLD, marginBottom: 6, textTransform: 'capitalize' }}>{inf.archetype}</div>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                  {(inf.platforms ?? []).map((pl, j) => (
+                    <span key={j} style={{ padding: '2px 7px', borderRadius: 10, background: `${GOLD}10`, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{pl}</span>
+                  ))}
+                </div>
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>{inf.strategy}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CTA to Express */}
+      <div style={{
+        background: `linear-gradient(135deg, rgba(201,168,76,0.1) 0%, rgba(13,17,23,0.5) 100%)`,
+        border: `1px solid ${BORDER}`, borderRadius: 12, padding: 22,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+      }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'white', marginBottom: 4 }}>Start Creating Content</h3>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Express module generates archetype-aligned content using this positioning as the strategic foundation.</p>
+        </div>
+        <button onClick={() => router.push(`/dashboard/clients/${clientId}/express`)} style={{
+          padding: '11px 22px', borderRadius: 8, background: GOLD, color: '#080C14',
+          fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap',
+        }}>
+          Go to Express <ArrowRight size={15} />
+        </button>
+      </div>
+
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 16, textAlign: 'right' }}>
+        Last analysed {new Date(pos.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+      </p>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function PositionPage() {
-  const params = useParams();
-  const router = useRouter();
+  const params   = useParams();
   const clientId = params.id as string;
-  const { toast } = useToast();
-  const { currentClient } = useClientStore();
-  const { positioning, setPositioning, isPositioned } = usePositioningStore();
 
-  const [loading, setLoading] = useState(true);
-  const [showWizard, setShowWizard] = useState(false);
-  const [wizardStep, setWizardStep] = useState(0);
-  const [showEvolution, setShowEvolution] = useState(false);
-  const [showDNAAnalyzer, setShowDNAAnalyzer] = useState(false);
-  const [influencerTemplates, setInfluencerTemplates] = useState<InfluencerTemplate[]>([]);
+  const [pos,         setPos]         = useState<Positioning | null>(null);
+  const [client,      setClient]      = useState<Client | null>(null);
+  const [hasDiscover, setHasDiscover] = useState(false);
+  const [hasLSI,      setHasLSI]      = useState(false);
+  const [loading,     setLoading]     = useState(true);
+  const [forceRerun,  setForceRerun]  = useState(false);
 
-  // Wizard state
-  const [mode, setMode] = useState<'personal_only' | 'personal_and_business'>('personal_only');
-  const [personalArchetype, setPersonalArchetype] = useState('');
-  const [businessArchetype, setBusinessArchetype] = useState('');
-  const [predictedFollowability, setPredictedFollowability] = useState<number | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: cl }, { data: dr }, { data: lsi }, { data: positioning }] = await Promise.all([
+      supabase.from('clients').select('name,industry,role,company,baseline_lsi').eq('id', clientId).single(),
+      supabase.from('discover_runs').select('id').eq('client_id', clientId).eq('status', 'completed').limit(1).maybeSingle(),
+      supabase.from('lsi_runs').select('id').eq('client_id', clientId).limit(1).maybeSingle(),
+      supabase.from('positioning').select('*').eq('client_id', clientId).maybeSingle(),
+    ]);
+    setClient(cl as Client ?? null);
+    setHasDiscover(!!dr);
+    setHasLSI(!!lsi);
+    setPos(positioning as Positioning ?? null);
+    setLoading(false);
+  }, [clientId]);
 
-  useEffect(() => {
-    // Check if positioning exists
-    const timer = setTimeout(() => {
-      if (!isPositioned) {
-        setShowWizard(true);
-      }
-      setLoading(false);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [isPositioned]);
-
-  const predictFollowability = async () => {
-    try {
-      const response = await fetch('/api/archetype/predict-followability', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          personalArchetype,
-          businessArchetype: mode === 'personal_and_business' ? businessArchetype : undefined,
-          clientProfile: { industry: currentClient?.industry, role: currentClient?.role },
-        }),
-      });
-
-      if (!response.ok) throw new Error('Prediction failed');
-      const data = await response.json() as { score: number; factors: Record<string, number> };
-      setPredictedFollowability(data.score);
-    } catch {
-      // Fallback to archetype base score
-      const baseScore = ARCHETYPES.find(a => a.id === personalArchetype)?.followability || 70;
-      setPredictedFollowability(Math.round(baseScore + Math.random() * 5));
-    }
-  };
-
-  const completePositioning = async () => {
-    const newPositioning: PositioningData = {
-      id: crypto.randomUUID(),
-      mode,
-      personal_archetype: personalArchetype,
-      business_archetype: mode === 'personal_and_business' ? businessArchetype : undefined,
-      archetype_confidence: 85,
-      followability_score: predictedFollowability || 75,
-      followability_factors: {
-        uniqueness: Math.round(70 + Math.random() * 20),
-        emotionalResonance: Math.round(75 + Math.random() * 15),
-        contentOpportunity: Math.round(80 + Math.random() * 10),
-        platformFit: Math.round(85 + Math.random() * 10),
-        historicalPerformance: Math.round(60 + Math.random() * 25)
-      },
-      positioning_statement: `The ${ARCHETYPES.find(a => a.id === personalArchetype)?.name} who transforms ${currentClient?.industry || 'industry'} through ${ARCHETYPES.find(a => a.id === personalArchetype)?.traits[0].toLowerCase()} leadership.`,
-      content_pillars: [
-        { name: 'Industry Insights', themes: ['Trends', 'Analysis', 'Predictions'], frequency: '2x weekly', formats: ['LinkedIn articles', 'Threads'] },
-        { name: 'Leadership Lessons', themes: ['Management', 'Culture', 'Growth'], frequency: '1x weekly', formats: ['Personal stories', 'Frameworks'] },
-        { name: 'Behind the Scenes', themes: ['Operations', 'Decision-making', 'Challenges'], frequency: '1x weekly', formats: ['Short posts', 'Carousels'] }
-      ],
-      signature_lines: [
-        "What would you add?",
-        "Agree or disagree?",
-        "Your thoughts?"
-      ],
-      target_influencers: [
-        { name: 'Naval Ravikant', archetype: 'sage', platforms: ['Twitter', 'Podcast'], strategy: 'Engage with philosophical takes' },
-        { name: 'Sara Blakely', archetype: 'rebel', platforms: ['LinkedIn', 'Instagram'], strategy: 'Comment on founder stories' }
-      ],
-      ab_test_active: false
-    };
-
-    setPositioning(newPositioning);
-    setShowWizard(false);
-    toast({
-      title: "Positioning Locked",
-      description: "Your strategic foundation is now set. All content will align with this positioning."
-    });
-  };
-
-  const handleEvolve = (evolveMode: 'add' | 'replace', archetypeId: string) => {
-    toast({
-      title: "Evolution Started",
-      description: `30-day A/B test initiated for ${evolveMode === 'add' ? 'secondary' : 'new primary'} archetype.`
-    });
-    setShowEvolution(false);
-  };
-
-  const saveInfluencerTemplate = (template: InfluencerTemplate) => {
-    setInfluencerTemplates(prev => [...prev, template]);
-    toast({
-      title: "Template Saved",
-      description: `${template.influencer_name}'s DNA added to your library.`
-    });
-  };
+  useEffect(() => { load(); }, [load]);
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-48 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32" />)}
-        </div>
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: GOLD }}>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <RefreshCw size={22} style={{ animation: 'spin 1s linear infinite', marginRight: 10 }} /> Loading…
       </div>
     );
   }
 
-  // Wizard Modal
-  if (showWizard) {
-    const steps = ['Select Mode', 'Choose Archetype', 'Predict Followability', 'Review & Confirm'];
-    
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Card className="border-2 border-primary-100">
-          <CardHeader>
-            <div className="flex items-center justify-between mb-2">
-              <Badge variant="outline" className="text-primary-600">
-                Step {wizardStep + 1} of {steps.length}
-              </Badge>
-              <span className="text-caption text-neutral-500">{steps[wizardStep]}</span>
-            </div>
-            <Progress value={((wizardStep + 1) / steps.length) * 100} className="h-2" />
-          </CardHeader>
+  const showAnalysis = !pos || forceRerun;
 
-          <CardContent className="py-6">
-            <AnimatePresence mode="wait">
-              {wizardStep === 0 && (
-                <motion.div
-                  key="step0"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-6"
-                >
-                  <div>
-                    <h2 className="text-heading-lg text-neutral-900 mb-2">Select Positioning Mode</h2>
-                    <p className="text-body text-neutral-600">Choose how you want to position your reputation.</p>
-                  </div>
-
-                  <RadioGroup value={mode} onValueChange={(v) => setMode(v as typeof mode)} className="space-y-4">
-                    <div className={cn(
-                      "flex items-start space-x-4 p-4 rounded-xl border-2 cursor-pointer transition-all",
-                      mode === 'personal_only' ? "border-primary-500 bg-primary-50" : "border-neutral-200 hover:border-primary-300"
-                    )} onClick={() => setMode('personal_only')}>
-                      <RadioGroupItem value="personal_only" id="personal_only" className="mt-1" />
-                      <div className="flex-1">
-                        <Label htmlFor="personal_only" className="text-heading-sm font-semibold cursor-pointer">Personal Archetype Only</Label>
-                        <p className="text-body-sm text-neutral-600 mt-1">Best for: Film actors, artists, writers, independent consultants</p>
-                        <ul className="mt-2 space-y-1 text-caption text-neutral-500">
-                          <li>• Single cohesive narrative</li>
-                          <li>• Easier to maintain consistency</li>
-                          <li>• Stronger personal connection</li>
-                        </ul>
-                      </div>
-                    </div>
-
-                    <div className={cn(
-                      "flex items-start space-x-4 p-4 rounded-xl border-2 cursor-pointer transition-all",
-                      mode === 'personal_and_business' ? "border-primary-500 bg-primary-50" : "border-neutral-200 hover:border-primary-300"
-                    )} onClick={() => setMode('personal_and_business')}>
-                      <RadioGroupItem value="personal_and_business" id="personal_and_business" className="mt-1" />
-                      <div className="flex-1">
-                        <Label htmlFor="personal_and_business" className="text-heading-sm font-semibold cursor-pointer">Personal + Business Archetypes</Label>
-                        <p className="text-body-sm text-neutral-600 mt-1">Best for: CEOs, founders, executives, company leaders</p>
-                        <ul className="mt-2 space-y-1 text-caption text-neutral-500">
-                          <li>• Dual narrative flexibility</li>
-                          <li>• Company + personal reputation</li>
-                          <li>• Higher complexity, higher reward</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </RadioGroup>
-                </motion.div>
-              )}
-
-              {wizardStep === 1 && (
-                <motion.div
-                  key="step1"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-6"
-                >
-                  <div>
-                    <h2 className="text-heading-lg text-neutral-900 mb-2">Choose Your Archetype</h2>
-                    <p className="text-body text-neutral-600">Select the persona that best represents your natural strengths.</p>
-                  </div>
-
-                  <Tabs defaultValue="jungian" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="jungian">Jungian Core (12)</TabsTrigger>
-                      <TabsTrigger value="professional">Professional (21)</TabsTrigger>
-                      <TabsTrigger value="niche">Niche (21)</TabsTrigger>
-                    </TabsList>
-                    
-                    {['jungian', 'professional', 'niche'].map((tier) => (
-                      <TabsContent key={tier} value={tier} className="mt-4">
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                          {ARCHETYPES.filter(a => a.tier === tier).map(archetype => (
-                            <ArchetypeCard
-                              key={archetype.id}
-                              archetype={archetype}
-                              selected={personalArchetype === archetype.id}
-                              onClick={() => setPersonalArchetype(archetype.id)}
-                            />
-                          ))}
-                        </div>
-                      </TabsContent>
-                    ))}
-                  </Tabs>
-
-                  {mode === 'personal_and_business' && (
-                    <div className="mt-6 pt-6 border-t border-neutral-200">
-                      <Label className="text-label mb-3 block">Select Business Archetype (Optional)</Label>
-                      <Select value={businessArchetype} onValueChange={setBusinessArchetype}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose business archetype..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ARCHETYPES.filter(a => a.tier === 'professional').map(a => (
-                            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-
-              {wizardStep === 2 && (
-                <motion.div
-                  key="step2"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-6"
-                >
-                  <div className="text-center">
-                    <h2 className="text-heading-lg text-neutral-900 mb-2">Predict Followability</h2>
-                    <p className="text-body text-neutral-600">Our AI analyzes archetype-market fit to predict audience resonance.</p>
-                  </div>
-
-                  {!predictedFollowability ? (
-                    <div className="text-center py-8">
-                      <Button size="lg" onClick={predictFollowability} className="mx-auto">
-                        <Wand2 className="mr-2 h-4 w-4" />
-                        Calculate Followability Score
-                      </Button>
-                    </div>
-                  ) : (
-                    <FollowabilityPrediction 
-                      score={predictedFollowability}
-                      factors={{
-                        uniqueness: Math.round(75 + Math.random() * 15),
-                        emotionalResonance: Math.round(70 + Math.random() * 20),
-                        contentOpportunity: Math.round(80 + Math.random() * 15),
-                        platformFit: Math.round(85 + Math.random() * 10),
-                        historicalPerformance: Math.round(65 + Math.random() * 20)
-                      }}
-                    />
-                  )}
-                </motion.div>
-              )}
-
-              {wizardStep === 3 && (
-                <motion.div
-                  key="step3"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-6"
-                >
-                  <div className="text-center">
-                    <h2 className="text-heading-lg text-neutral-900 mb-2">Review Your Positioning</h2>
-                    <p className="text-body text-neutral-600">Confirm your strategic foundation before locking.</p>
-                  </div>
-
-                  <Card className="bg-neutral-50">
-                    <CardContent className="p-6 space-y-4">
-                      <div className="flex justify-between items-center pb-4 border-b border-neutral-200">
-                        <span className="text-body-sm text-neutral-500">Mode</span>
-                        <Badge variant="secondary">{mode === 'personal_only' ? 'Personal Only' : 'Personal + Business'}</Badge>
-                      </div>
-                      <div className="flex justify-between items-center pb-4 border-b border-neutral-200">
-                        <span className="text-body-sm text-neutral-500">Personal Archetype</span>
-                        <span className="text-body font-medium">{ARCHETYPES.find(a => a.id === personalArchetype)?.name}</span>
-                      </div>
-                      {businessArchetype && (
-                        <div className="flex justify-between items-center pb-4 border-b border-neutral-200">
-                          <span className="text-body-sm text-neutral-500">Business Archetype</span>
-                          <span className="text-body font-medium">{ARCHETYPES.find(a => a.id === businessArchetype)?.name}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center">
-                        <span className="text-body-sm text-neutral-500">Predicted Followability</span>
-                        <span className="text-heading-sm text-primary-600 font-bold">{predictedFollowability}%</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Alert className="border-warning-200 bg-warning-50">
-                    <AlertTriangle className="h-4 w-4 text-warning-600" />
-                    <AlertTitle className="text-warning-800">Strategic Lock</AlertTitle>
-                    <AlertDescription className="text-warning-700">
-                      Once confirmed, this positioning will guide all content in the EXPRESS module. You can evolve it later, but changes require a 30-day transition period.
-                    </AlertDescription>
-                  </Alert>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </CardContent>
-
-          <CardFooter className="flex justify-between border-t border-neutral-100 pt-6">
-            <Button
-              variant="outline"
-              onClick={() => setWizardStep(Math.max(0, wizardStep - 1))}
-              disabled={wizardStep === 0}
-            >
-              Back
-            </Button>
-            
-            {wizardStep < steps.length - 1 ? (
-              <Button 
-                onClick={() => setWizardStep(wizardStep + 1)}
-                disabled={(wizardStep === 0 && !mode) || (wizardStep === 1 && !personalArchetype)}
-              >
-                Continue
-                <ChevronRight className="ml-2 h-4 w-4" />
-              </Button>
-            ) : (
-              <Button onClick={completePositioning} className="bg-success-600 hover:bg-success-700">
-                <Lock className="mr-2 h-4 w-4" />
-                Lock Positioning
-              </Button>
-            )}
-          </CardFooter>
-        </Card>
-      </div>
-    );
-  }
-
-  // Main Positioning Dashboard
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Strategic Lock Indicator */}
-      <Alert className="border-success-500 bg-success-50">
-        <Lock className="h-4 w-4 text-success-700" />
-        <AlertTitle className="text-success-800">Strategic Foundation Locked</AlertTitle>
-        <AlertDescription className="text-success-700 flex items-center justify-between">
-          <span>All content in EXPRESS will align with this positioning.</span>
-          <Button variant="link" onClick={() => setShowEvolution(true)} className="text-success-800 hover:text-success-900">
-            Evolve archetype →
-          </Button>
-        </AlertDescription>
-      </Alert>
-
-      {/* Positioning Summary */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <Label className="text-caption text-neutral-500 uppercase tracking-wider">Archetype</Label>
-              <p className="text-heading-md text-neutral-900 mt-2">
-                {ARCHETYPES.find(a => a.id === positioning?.personal_archetype)?.name}
-                {positioning?.business_archetype && (
-                  <span className="text-neutral-400"> + {ARCHETYPES.find(a => a.id === positioning.business_archetype)?.name}</span>
-                )}
-              </p>
-              <p className="text-body-sm text-neutral-600 mt-1">
-                {ARCHETYPES.find(a => a.id === positioning?.personal_archetype)?.description}
-              </p>
-            </div>
-            
-            <div>
-              <Label className="text-caption text-neutral-500 uppercase tracking-wider">Followability Score</Label>
-              <div className="flex items-baseline gap-3 mt-2">
-                <span className="text-heading-md text-primary-600 font-bold">
-                  {positioning?.followability_score}%
-                </span>
-                <Badge className={cn(
-                  positioning?.followability_score! >= 80 ? "bg-success-500" :
-                  positioning?.followability_score! >= 65 ? "bg-primary-500" :
-                  "bg-warning-500",
-                  "text-white"
-                )}>
-                  {positioning?.followability_score! >= 80 ? 'Exceptional' :
-                   positioning?.followability_score! >= 65 ? 'Strong' : 'Moderate'}
-                </Badge>
-              </div>
-              <div className="mt-3 space-y-1">
-                {Object.entries(positioning?.followability_factors || {}).slice(0, 3).map(([key, value]) => (
-                  <div key={key} className="flex justify-between text-caption">
-                    <span className="text-neutral-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                    <span className="font-medium text-neutral-700">{Number(value)}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <div>
-              <Label className="text-caption text-neutral-500 uppercase tracking-wider">Mode</Label>
-              <p className="text-body text-neutral-900 mt-2">
-                {positioning?.mode === 'personal_only' ? 'Personal Only' : 'Personal + Business'}
-              </p>
-              <p className="text-body-sm text-neutral-600 mt-1">
-                {positioning?.mode === 'personal_only' 
-                  ? 'Single archetype strategy for focused personal brand' 
-                  : 'Dual archetype strategy for complex leadership roles'}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Content Strategy */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-heading-md flex items-center gap-2">
-              <Target className="h-5 w-5 text-primary-600" />
-              Content Pillars
-            </CardTitle>
-            <CardDescription>Strategic themes for consistent content creation</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {positioning?.content_pillars.map((pillar: ContentPillar, i: number) => (
-              <div key={i} className="p-4 bg-neutral-50 rounded-lg border border-neutral-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-heading-sm font-semibold text-neutral-900">{pillar.name}</h4>
-                  <Badge variant="outline">{pillar.frequency}</Badge>
-                </div>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {pillar.themes.map((theme: string) => (
-                    <span key={theme} className="text-caption bg-white text-neutral-600 px-2 py-1 rounded border border-neutral-200">
-                      {theme}
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  {pillar.formats.map((format: string) => (
-                    <span key={format} className="text-caption text-neutral-500">
-                      {format}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-            
-            <Button variant="outline" className="w-full">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Content Pillar
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-heading-md">Signature Lines</CardTitle>
-            <CardDescription>Reusable closing phrases</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {positioning?.signature_lines.map((line: string, i: number) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-neutral-50 rounded border border-neutral-200 group">
-                <span className="text-body-sm text-neutral-700">{line}</span>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => navigator.clipboard.writeText(line)}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-            <Button variant="ghost" className="w-full text-body-sm">
-              <Plus className="mr-2 h-3 w-3" />
-              Add Signature
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Influencer Mapping */}
-      <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <CardTitle className="text-heading-md flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary-600" />
-              Target Influencers
-            </CardTitle>
-            <CardDescription>Strategic relationships to cultivate</CardDescription>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowDNAAnalyzer(true)}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              Analyze Influencer DNA
-            </Button>
-            <Button variant="outline">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Target
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {positioning?.target_influencers.map((influencer: TargetInfluencer, i: number) => (
-              <div key={i} className="flex items-start gap-4 p-4 bg-neutral-50 rounded-lg border border-neutral-200">
-                <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-heading-sm">
-                  {influencer.name.charAt(0)}
-                </div>
-                <div className="flex-1">
-                  <h4 className="text-body font-semibold text-neutral-900">{influencer.name}</h4>
-                  <p className="text-caption text-neutral-500 capitalize mb-2">{influencer.archetype} archetype</p>
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {influencer.platforms.map((platform: string) => (
-                      <Badge key={platform} variant="secondary" className="text-caption">
-                        {platform}
-                      </Badge>
-                    ))}
-                  </div>
-                  <p className="text-body-sm text-neutral-600">{influencer.strategy}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {influencerTemplates.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-neutral-200">
-              <h4 className="text-heading-sm font-semibold text-neutral-900 mb-3">Saved Templates</h4>
-              <div className="space-y-2">
-                {influencerTemplates.map(template => (
-                  <div key={template.id} className="flex items-center justify-between p-3 bg-primary-50 rounded border border-primary-100">
-                    <div>
-                      <p className="text-body-sm font-medium text-neutral-900">{template.influencer_name} Style</p>
-                      <p className="text-caption text-neutral-500">{template.style.pacing} pacing • {template.style.activeVoice}% active voice</p>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      Use Template
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Dialogs */}
-      <ArchetypeEvolutionDialog
-        open={showEvolution}
-        onOpenChange={setShowEvolution}
-        currentArchetype={positioning?.personal_archetype || ''}
-        onEvolve={handleEvolve}
-      />
-
-      <InfluencerDNAAnalyzer
-        open={showDNAAnalyzer}
-        onOpenChange={setShowDNAAnalyzer}
-        onSave={saveInfluencerTemplate}
-        clientId={clientId}
-      />
+    <div style={{ color: 'white', fontFamily: "'Inter', system-ui, sans-serif", paddingBottom: 60 }}>
+      {showAnalysis ? (
+        <RunAnalysisPanel
+          clientId={clientId}
+          hasDiscover={hasDiscover}
+          hasLSI={hasLSI}
+          onComplete={() => { setForceRerun(false); load(); }}
+        />
+      ) : (
+        <PositioningDisplay
+          pos={pos!}
+          clientId={clientId}
+          onRerun={() => setForceRerun(true)}
+        />
+      )}
     </div>
   );
 }

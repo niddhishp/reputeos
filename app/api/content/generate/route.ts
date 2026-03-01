@@ -1,329 +1,222 @@
 /**
- * Content Generation API Route
- * 
+ * Content Generation API
  * POST /api/content/generate
- * 
- * Generates thought leadership content using OpenAI based on client positioning.
- * Includes rate limiting, input validation, and authorization checks.
+ *
+ * Uses Claude Sonnet 3.5 (via OpenRouter) or GPT-4o for thought leadership content.
+ * Pulls real positioning from DB, builds archetype-calibrated system prompt.
  */
 
 import { z } from 'zod';
-import { createClient, verifyClientOwnership } from '@/lib/supabase/server';
-import { contentRateLimiter, getClientIP, createRateLimitResponse } from '@/lib/ratelimit';
-import { generateContent, generateWithRetry } from '@/lib/ai/client';
-import { buildContentSystemPrompt, buildContentUserPrompt } from '@/lib/ai/prompts';
-import { ContentPlatform } from '@/types/content';
+import { createClient, createAdminClient, verifyClientOwnership } from '@/lib/supabase/server';
 
-// Input validation schema
-const GenerateContentSchema = z.object({
-  clientId: z.string().uuid('Invalid client ID format'),
-  topic: z.string()
-    .min(10, 'Topic must be at least 10 characters')
-    .max(500, 'Topic must be less than 500 characters')
-    .regex(/^[\w\s.,!?'\-:]+$/, 'Topic contains invalid characters'),
-  platform: z.enum(['linkedin', 'twitter', 'medium', 'op_ed', 'keynote'] as const),
-  templateId: z.string().uuid().optional(),
-  keyPoints: z.array(z.string().max(200)).max(5).optional(),
-  callToAction: z.string().max(200).optional(),
+const Schema = z.object({
+  clientId:   z.string().uuid(),
+  platform:   z.enum(['linkedin_long', 'linkedin_short', 'twitter_thread', 'oped', 'whitepaper', 'keynote']),
+  topic:      z.string().min(5).max(500),
+  templateId: z.string().optional(), // influencer template id
+  tone:       z.enum(['authoritative', 'conversational', 'provocative', 'analytical']).optional(),
 });
 
-export type GenerateContentInput = z.infer<typeof GenerateContentSchema>;
+const PLATFORM_SPECS: Record<string, { label: string; wordCount: string; format: string; instructions: string }> = {
+  linkedin_long: {
+    label: 'LinkedIn Article',
+    wordCount: '800–1,200 words',
+    format: 'Long-form article',
+    instructions: `Start with a bold one-line hook (no "See more" cut-off in first sentence).
+Use short paragraphs (2–3 lines max). Include a personal anecdote or data point by paragraph 3.
+End with a specific question to drive comments. No hashtag spam.`,
+  },
+  linkedin_short: {
+    label: 'LinkedIn Post',
+    wordCount: '150–250 words',
+    format: 'Short-form post',
+    instructions: `First line must stop the scroll — use a surprising insight or counter-intuitive statement.
+3–4 short paragraphs. End with ONE focused question. No hashtags.`,
+  },
+  twitter_thread: {
+    label: 'X / Twitter Thread',
+    wordCount: '10–15 tweets',
+    format: 'Numbered thread',
+    instructions: `Tweet 1: Hook — bold claim or surprising statistic.
+Tweets 2–12: One insight per tweet, numbered (2/, 3/ etc).
+Tweet 13+: Summary or call to action.
+Each tweet under 280 characters. No filler.`,
+  },
+  oped: {
+    label: 'Op-Ed (ET/Mint/Bloomberg)',
+    wordCount: '700–900 words',
+    format: 'Opinion piece',
+    instructions: `Opening paragraph: state your thesis clearly. Three supporting arguments with evidence.
+Counter-argument + rebuttal in paragraph 4. Strong concluding call to action.
+Suitable for Economic Times, Mint, or Bloomberg Opinion.`,
+  },
+  whitepaper: {
+    label: 'Whitepaper',
+    wordCount: '1,500–2,500 words',
+    format: 'Research document',
+    instructions: `Executive Summary (150 words). Problem statement with data. Solution framework.
+3–4 sections with subheadings. Case study or example. Conclusion with next steps.
+Professional, research-backed tone. Include specific metrics where possible.`,
+  },
+  keynote: {
+    label: 'Keynote Outline',
+    wordCount: '400–600 words',
+    format: 'Presentation outline',
+    instructions: `Opening hook (30 seconds). 3-act structure with clear arc.
+Act 1 (Problem): The uncomfortable truth. Act 2 (Shift): Your unique insight.
+Act 3 (Future): What's possible. Strong closing line. Include speaker notes for each section.`,
+  },
+};
 
-export interface GenerateContentResponse {
-  success: boolean;
-  content: string;
-  metadata: {
-    model: string;
-    tokensUsed: number;
-    platform: ContentPlatform;
-    topic: string;
-  };
-}
-
-export interface GenerateContentError {
-  error: string;
-  message: string;
-  details?: z.ZodError['errors'];
-}
-
-/**
- * POST handler for content generation
- */
 export async function POST(request: Request): Promise<Response> {
-  try {
-    // ==========================================================================
-    // 1. Rate Limiting Check
-    // ==========================================================================
-    const clientIP = getClientIP(request);
-    const rateLimitResult = await contentRateLimiter.limit(clientIP);
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    if (!rateLimitResult.success) {
-      return createRateLimitResponse({
-        success: false,
-        limit: rateLimitResult.limit,
-        remaining: rateLimitResult.remaining,
-        reset: rateLimitResult.reset,
-      });
-    }
-
-    // ==========================================================================
-    // 2. Authentication Check
-    // ==========================================================================
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return Response.json(
-        { error: 'Unauthorized', message: 'You must be logged in to generate content' },
-        { status: 401 }
-      );
-    }
-
-    // ==========================================================================
-    // 3. Input Validation
-    // ==========================================================================
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return Response.json(
-        { error: 'Invalid JSON', message: 'Request body must be valid JSON' },
-        { status: 400 }
-      );
-    }
-
-    const parsed = GenerateContentSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return Response.json(
-        {
-          error: 'Invalid input',
-          message: 'Request body failed validation',
-          details: parsed.error.errors,
-        },
-        { status: 400 }
-      );
-    }
-
-    const { clientId, topic, platform, keyPoints, callToAction } = parsed.data;
-
-    // ==========================================================================
-    // 4. Authorization Check - Verify user owns the client
-    // ==========================================================================
-    const isOwner = await verifyClientOwnership(clientId);
-
-    if (!isOwner) {
-      return Response.json(
-        { error: 'Forbidden', message: 'You do not have access to this client' },
-        { status: 403 }
-      );
-    }
-
-    // ==========================================================================
-    // 5. Fetch Client Positioning Data
-    // ==========================================================================
-    const [{ data: client }, { data: positioning }] = await Promise.all([
-      supabase.from('clients').select('*').eq('id', clientId).single(),
-      supabase.from('positioning').select('*').eq('client_id', clientId).single(),
-    ]);
-
-    if (!client) {
-      return Response.json(
-        { error: 'Not found', message: 'Client not found' },
-        { status: 404 }
-      );
-    }
-
-    // Use default positioning if none exists
-    const archetype = positioning?.personal_archetype || 'Thought Leader';
-    const contentPillars = positioning?.content_pillars?.map((p: { name: string }) => p.name) || [
-      'Industry Insights',
-      'Leadership',
-      'Innovation',
-    ];
-    const voiceCharacteristics = positioning?.voice_characteristics || {
-      tone: 'professional',
-      formality: 'business casual',
-      sentenceStyle: 'clear and concise',
-      vocabularyLevel: 'sophisticated',
-    };
-
-    // ==========================================================================
-    // 6. Generate Content with AI
-    // ==========================================================================
-    const systemPrompt = buildContentSystemPrompt({
-      archetype: archetype as any,
-      contentPillars,
-      voiceCharacteristics,
-      topic,
-      platform,
-      keyPoints,
-      callToAction,
-    });
-
-    const userPrompt = buildContentUserPrompt({
-      archetype: archetype as any,
-      contentPillars,
-      voiceCharacteristics,
-      topic,
-      platform,
-      keyPoints,
-      callToAction,
-    });
-
-    const result = await generateWithRetry(() =>
-      generateContent({
-        systemPrompt,
-        userPrompt,
-        temperature: 0.7,
-        maxTokens: 2500,
-      })
-    );
-
-    // ==========================================================================
-    // 7. Save Generated Content to Database
-    // ==========================================================================
-    const { error: saveError } = await supabase.from('content_items').insert({
-      client_id: clientId,
-      platform,
-      topic,
-      content: result.content,
-      status: 'draft',
-      ai_metadata: {
-        model: result.model,
-        tokens_used: result.usage.totalTokens,
-        finish_reason: result.finishReason,
-      },
-    });
-
-    if (saveError) {
-      console.error('Failed to save content:', saveError);
-      // Don't fail the request, just log the error
-    }
-
-    // ==========================================================================
-    // 8. Return Success Response
-    // ==========================================================================
-    const response: GenerateContentResponse = {
-      success: true,
-      content: result.content,
-      metadata: {
-        model: result.model,
-        tokensUsed: result.usage.totalTokens,
-        platform,
-        topic,
-      },
-    };
-
-    return Response.json(response, {
-      status: 200,
-      headers: {
-        'X-RateLimit-Limit': String(rateLimitResult.limit),
-        'X-RateLimit-Remaining': String(rateLimitResult.remaining),
-        'X-RateLimit-Reset': String(rateLimitResult.reset),
-      },
-    });
-
-  } catch (error) {
-    console.error('Content generation error:', error);
-
-    // Handle specific error types
-    if (error instanceof Error) {
-      if (error.message.includes('rate limit')) {
-        return Response.json(
-          { error: 'Rate limited', message: 'AI service rate limit exceeded. Please try again later.' },
-          { status: 429 }
-        );
-      }
-
-      if (error.message.includes('context length')) {
-        return Response.json(
-          { error: 'Content too long', message: 'The input content is too long. Please shorten your topic or key points.' },
-          { status: 400 }
-        );
-      }
-    }
-
-    return Response.json(
-      { error: 'Internal server error', message: 'Failed to generate content. Please try again later.' },
-      { status: 500 }
-    );
+  let body: unknown;
+  try { body = await request.json(); } catch {
+    return Response.json({ error: 'Invalid JSON' }, { status: 400 });
   }
-}
 
-/**
- * GET handler - Get generation status or history
- */
-export async function GET(request: Request): Promise<Response> {
+  const parsed = Schema.safeParse(body);
+  if (!parsed.success) return Response.json({ error: 'Invalid input', details: parsed.error.errors }, { status: 400 });
+
+  const { clientId, platform, topic, templateId, tone } = parsed.data;
+  const isOwner = await verifyClientOwnership(clientId);
+  if (!isOwner) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
+  // ── Fetch positioning + template ──────────────────────────────────────────
+  const [{ data: client }, { data: positioning }, { data: template }] = await Promise.all([
+    supabase.from('clients').select('name, role, industry, company').eq('id', clientId).single(),
+    supabase.from('positioning').select('*').eq('client_id', clientId).maybeSingle(),
+    templateId
+      ? supabase.from('influencer_templates').select('*').eq('id', templateId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const spec = PLATFORM_SPECS[platform];
+  const archetype      = (positioning?.personal_archetype as string) ?? 'Expert Authority';
+  const businessArch   = (positioning?.business_archetype  as string) ?? '';
+  const pillars        = (positioning?.content_pillars as Array<{ name: string; themes: string[] }>) ?? [];
+  const statement      = (positioning?.positioning_statement as string) ?? '';
+  const voiceTone      = tone ?? 'authoritative';
+
+  // ── System prompt ─────────────────────────────────────────────────────────
+  const systemPrompt = `You are a ghost-writer for ${client?.name ?? 'this executive'}, a ${client?.role ?? 'leader'} in the ${client?.industry ?? 'industry'} sector at ${client?.company ?? 'their company'}.
+
+ARCHETYPE: ${archetype}${businessArch ? ` (Personal) + ${businessArch} (Business)` : ''}
+POSITIONING: ${statement || 'A respected expert who creates measurable impact.'}
+VOICE TONE: ${voiceTone}
+
+${pillars.length > 0 ? `CONTENT PILLARS (stay within these themes):
+${pillars.slice(0, 5).map((p, i) => `${i + 1}. ${p.name}: ${p.themes.join(', ')}`).join('\n')}` : ''}
+
+NLP REQUIREMENTS (non-negotiable):
+1. Linguistic frames: Use "expert", "leader", "proven" frames. Avoid "family", "legacy", "wealth" frames.
+2. Authority markers: Include at least 2 of: a presupposition ("Based on my X years..."), a factive verb ("demonstrates", "establishes"), a quantified achievement.
+3. Archetype alignment: Write as the ${archetype} — embody their core traits and voice in every sentence.
+4. No corporate clichés ("leverage synergies", "move the needle", "game-changer").
+5. Specific over generic: use actual numbers, real examples, named frameworks.
+
+FORMAT REQUIREMENTS (${spec.label}):
+Target: ${spec.wordCount}
+${spec.instructions}
+
+${template ? `STRUCTURAL TEMPLATE (match this style and pacing, not the content):
+${(template as Record<string, unknown>).template_text ?? ''}` : ''}
+
+Write ONLY the content. No preamble. No "Here is your article:". No meta-commentary.`;
+
+  // ── Generate ──────────────────────────────────────────────────────────────
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  const openaiKey     = process.env.OPENAI_API_KEY;
+
+  if (!openrouterKey && !openaiKey) {
+    return Response.json({ error: 'No AI API key configured', message: 'Add OPENROUTER_API_KEY or OPENAI_API_KEY to environment variables.' }, { status: 503 });
+  }
+
+  const endpoint = openrouterKey
+    ? 'https://openrouter.ai/api/v1/chat/completions'
+    : 'https://api.openai.com/v1/chat/completions';
+
+  // Claude Sonnet for long-form, GPT-4o-mini for short posts
+  const model = openrouterKey
+    ? (platform === 'linkedin_short' || platform === 'twitter_thread'
+      ? 'anthropic/claude-haiku-3-5'
+      : 'anthropic/claude-sonnet-4-5')
+    : 'gpt-4o';
+
+  const maxTokens = platform === 'whitepaper' ? 3500 : platform === 'twitter_thread' ? 1200 : 2000;
+
   try {
-    const { searchParams } = new URL(request.url);
-    const clientId = searchParams.get('clientId');
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openrouterKey ?? openaiKey}`,
+        'Content-Type': 'application/json',
+        ...(openrouterKey ? { 'HTTP-Referer': 'https://reputeos.com', 'X-Title': 'ReputeOS' } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: `Write a ${spec.label} about: ${topic}` },
+        ],
+        temperature: voiceTone === 'provocative' ? 0.85 : voiceTone === 'analytical' ? 0.5 : 0.7,
+        max_tokens: maxTokens,
+      }),
+      signal: AbortSignal.timeout(90000),
+    });
 
-    if (!clientId) {
-      return Response.json(
-        { error: 'Bad request', message: 'clientId query parameter is required' },
-        { status: 400 }
-      );
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`AI API error ${res.status}: ${err.slice(0, 200)}`);
     }
 
-    // Validate UUID format
-    const uuidSchema = z.string().uuid();
-    const parsed = uuidSchema.safeParse(clientId);
+    const data  = await res.json();
+    const content = data.choices?.[0]?.message?.content ?? '';
+    if (!content) throw new Error('AI returned empty content');
 
-    if (!parsed.success) {
-      return Response.json(
-        { error: 'Invalid input', message: 'Invalid clientId format' },
-        { status: 400 }
-      );
-    }
+    // ── Word count ────────────────────────────────────────────────────────
+    const wordCount = content.split(/\s+/).filter(Boolean).length;
 
-    // Check authentication
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    // ── Quick NLP compliance snapshot ────────────────────────────────────
+    const cl = content.toLowerCase();
+    const compliance = {
+      hasAuthorityMarkers: /\d+\s*(year|month|billion|million|percent|%)|based on|having (built|led|managed)|i've (built|led|run|managed)/i.test(content),
+      expertFramePresent:  cl.includes('expert') || cl.includes('proven') || cl.includes('demonstrates') || cl.includes('establishes'),
+      familyFrameAbsent:   !cl.includes('family business') && !cl.includes('our family') && !cl.includes('legacy'),
+      wordCount,
+      estimatedReadTime:   `${Math.ceil(wordCount / 200)} min`,
+    };
 
-    if (!user) {
-      return Response.json(
-        { error: 'Unauthorized', message: 'You must be logged in' },
-        { status: 401 }
-      );
-    }
-
-    // Check authorization
-    const isOwner = await verifyClientOwnership(clientId);
-
-    if (!isOwner) {
-      return Response.json(
-        { error: 'Forbidden', message: 'You do not have access to this client' },
-        { status: 403 }
-      );
-    }
-
-    // Fetch recent content items
-    const { data: contentItems, error } = await supabase
-      .from('content_items')
-      .select('id, platform, topic, status, created_at, nlp_compliance')
-      .eq('client_id', clientId)
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    if (error) {
-      console.error('Failed to fetch content items:', error);
-      return Response.json(
-        { error: 'Database error', message: 'Failed to fetch content history' },
-        { status: 500 }
-      );
-    }
+    // ── Save draft ────────────────────────────────────────────────────────
+    const admin = createAdminClient();
+    const { data: saved } = await admin.from('content_items').insert({
+      client_id:    clientId,
+      positioning_id: positioning?.id ?? null,
+      title:        topic.slice(0, 100),
+      body:         content,
+      platform,
+      nlp_compliance: compliance,
+      status:       'draft',
+    }).select('id').single();
 
     return Response.json({
-      success: true,
-      items: contentItems,
+      success:    true,
+      contentId:  saved?.id,
+      content,
+      platform,
+      spec:       { label: spec.label, wordCount: spec.wordCount },
+      compliance,
+      modelUsed:  model,
     });
 
-  } catch (error) {
-    console.error('Get content history error:', error);
-    return Response.json(
-      { error: 'Internal server error', message: 'Failed to fetch content history' },
-      { status: 500 }
-    );
+  } catch (err) {
+    console.error('Content generation error:', err);
+    return Response.json({
+      error:   'Generation failed',
+      message: err instanceof Error ? err.message : 'Unknown error',
+    }, { status: 500 });
   }
 }

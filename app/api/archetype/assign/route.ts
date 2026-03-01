@@ -51,16 +51,18 @@ export async function POST(request: Request): Promise<Response> {
     const admin = createAdminClient();
     await admin.from('positioning').upsert({
       client_id: clientId,
-      mode: 'personal_only',
-      personal_archetype: result.personalArchetype.id,
-      business_archetype: result.businessArchetype.id,
-      archetype_confidence: result.confidence,
-      followability_score: result.followabilityScore,
-      followability_factors: result.followabilityFactors,
-      positioning_statement: result.positioningStatement,
-      content_pillars: result.contentPillars,
-      signature_lines: result.signatureLines,
-      target_influencers: [],
+      mode: result.personalArchetype?.id && result.businessArchetype?.id ? 'personal_and_business' : 'personal_only',
+      personal_archetype: result.personalArchetype?.name ?? result.personalArchetype?.id ?? 'Unknown',
+      business_archetype: result.businessArchetype?.name ?? result.businessArchetype?.id ?? null,
+      archetype_confidence: result.confidence ?? 75,
+      followability_score: result.followabilityScore ?? 70,
+      followability_factors: result.followabilityFactors ?? {},
+      positioning_statement: result.positioningStatement ?? '',
+      content_pillars: result.contentPillars ?? [],
+      signature_lines: result.signatureLines ?? [],
+      target_influencers: result.targetInfluencers ?? [],
+      root_cause_insights: result.rootCauseInsights ?? [],
+      strategic_insights: result.strategicInsights ?? [],
       updated_at: new Date().toISOString(),
     }, { onConflict: 'client_id' });
 
