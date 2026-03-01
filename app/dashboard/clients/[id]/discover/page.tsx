@@ -6,63 +6,70 @@ import { useParams } from 'next/navigation';
 import {
   Search, RefreshCw, CheckCircle2, Circle, Loader2,
   Globe, Newspaper, MessageSquare, Briefcase, Mic, FileText,
+  AlertCircle, TrendingUp, TrendingDown, Minus,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase/client';
 
-type ScanStatus = 'not_started' | 'pending' | 'running' | 'completed' | 'failed';
+type ScanStatus = 'not_started' | 'running' | 'completed' | 'failed';
 
 interface DiscoverRun {
   id: string;
   status: ScanStatus;
   progress: number;
   total_mentions: number;
-  sentiment_summary: { positive: number; neutral: number; negative: number; average?: number };
-  frame_distribution: Record<string, number>;
+  sentiment_summary: { positive: number; neutral: number; negative: number; average?: number } | null;
+  frame_distribution: Record<string, number> | null;
+  top_keywords: string[] | null;
+  archetype_hints: string[] | null;
+  error_message: string | null;
   started_at: string;
   completed_at: string | null;
-  error_message: string | null;
   created_at: string;
 }
 
+const GOLD = '#C9A84C';
+const CARD_BG = '#0d1117';
+const BORDER = 'rgba(255,255,255,0.07)';
+
 const SOURCE_CATEGORIES = [
-  { name: 'Search Engines & AI',     sourceCount: 15, icon: Globe },
-  { name: 'Media & News',            sourceCount: 10, icon: Newspaper },
-  { name: 'Social Media',            sourceCount: 8,  icon: MessageSquare },
-  { name: 'Professional Databases',  sourceCount: 7,  icon: Briefcase },
-  { name: 'Conferences & Events',    sourceCount: 5,  icon: Mic },
-  { name: 'Regulatory Filings',      sourceCount: 5,  icon: FileText },
+  { name: 'Search Engines & AI',    sourceCount: 15, icon: Globe },
+  { name: 'Media & News',           sourceCount: 10, icon: Newspaper },
+  { name: 'Social Media',           sourceCount: 8,  icon: MessageSquare },
+  { name: 'Professional Databases', sourceCount: 7,  icon: Briefcase },
+  { name: 'Conferences & Events',   sourceCount: 5,  icon: Mic },
+  { name: 'Regulatory Filings',     sourceCount: 5,  icon: FileText },
 ];
+
+const FRAME_COLORS: Record<string, string> = {
+  expert:  '#3b82f6',
+  founder: '#8b5cf6',
+  leader:  '#10b981',
+  family:  GOLD,
+  crisis:  '#ef4444',
+  other:   'rgba(255,255,255,0.2)',
+};
 
 export default function DiscoverPage() {
   const params = useParams<{ id: string }>();
   const clientId = params.id;
-  const { toast } = useToast();
 
   const [run, setRun] = useState<DiscoverRun | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'frames' | 'sentiment' | 'keywords'>('frames');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch latest run on mount
   useEffect(() => {
     fetchLatestRun().finally(() => setLoading(false));
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [clientId]);
 
-  // Poll while scan is in-progress
   useEffect(() => {
-    if (run?.status === 'pending' || run?.status === 'running') {
+    if (run?.status === 'running') {
       if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(fetchLatestRun, 2000);
+      pollRef.current = setInterval(fetchLatestRun, 2500);
     } else {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     }
@@ -76,223 +83,333 @@ export default function DiscoverPage() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-
     if (data) setRun(data as DiscoverRun);
     return data;
   }
 
   async function startScan() {
     setStarting(true);
+    setError(null);
     try {
       const res = await fetch('/api/discover/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId }),
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message ?? 'Failed to start scan');
-      }
-
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message ?? json.error ?? `HTTP ${res.status}`);
       await fetchLatestRun();
-      toast({ title: 'Scan started', description: 'Scanning across 50+ sources…' });
     } catch (e) {
-      toast({
-        title: 'Failed to start scan',
-        description: e instanceof Error ? e.message : 'Please try again.',
-        variant: 'destructive',
-      });
+      setError(e instanceof Error ? e.message : 'Failed to start scan. Please try again.');
     } finally {
       setStarting(false);
     }
   }
 
   const scanStatus: ScanStatus = run?.status ?? 'not_started';
-  const isScanning = scanStatus === 'pending' || scanStatus === 'running';
+  const isScanning = scanStatus === 'running';
   const progress = run?.progress ?? 0;
 
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-64 w-full" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {[200, 400, 300].map((w, i) => (
+          <div key={i} style={{ height: i === 0 ? 40 : i === 1 ? 160 : 260, backgroundColor: CARD_BG, borderRadius: 12, border: `1px solid ${BORDER}`, maxWidth: w === 200 ? 200 : '100%', animation: 'pulse 1.5s infinite' }} />
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Discover</h1>
-          <p className="text-sm text-neutral-500 mt-1">Digital footprint audit across 50+ sources</p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'white', margin: 0, letterSpacing: '-0.3px' }}>
+            Discover
+          </h1>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
+            Digital footprint audit across 50+ sources
+          </p>
         </div>
         {!isScanning && (
-          <Button onClick={startScan} disabled={starting} variant={run ? 'outline' : 'default'}>
-            {starting ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
-            )}
-            {run ? 'Re-scan' : 'Run Discovery Scan'}
-          </Button>
+          <button onClick={startScan} disabled={starting} style={{
+            display: 'flex', alignItems: 'center', gap: 7,
+            padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            cursor: starting ? 'not-allowed' : 'pointer',
+            backgroundColor: run ? 'transparent' : GOLD,
+            color: run ? 'rgba(255,255,255,0.6)' : '#080C14',
+            border: run ? '1px solid rgba(255,255,255,0.12)' : 'none',
+            opacity: starting ? 0.6 : 1, transition: 'all 150ms',
+          }}>
+            {starting
+              ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
+              : <RefreshCw style={{ width: 14, height: 14 }} />}
+            {starting ? 'Starting…' : run ? 'Re-scan' : 'Run Discovery Scan'}
+          </button>
         )}
       </div>
 
-      {/* Scanning state */}
+      {/* Error banner */}
+      {error && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '12px 16px', backgroundColor: 'rgba(239,68,68,0.08)',
+          border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10,
+        }}>
+          <AlertCircle style={{ width: 16, height: 16, color: '#ef4444', marginTop: 1, flexShrink: 0 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#f87171', margin: 0 }}>Scan failed to start</p>
+            <p style={{ fontSize: 12, color: 'rgba(239,68,68,0.6)', marginTop: 3 }}>{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Scanning progress */}
       {isScanning && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-              Scanning in progress…
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Progress value={progress} className="h-2" />
-            <p className="text-xs text-neutral-500">{progress}% complete</p>
-            <div className="space-y-2">
-              {SOURCE_CATEGORIES.map((cat, i) => {
-                const threshold = ((i + 1) / SOURCE_CATEGORIES.length) * 100;
-                const prevThreshold = (i / SOURCE_CATEGORIES.length) * 100;
-                const done = progress >= threshold;
-                const active = !done && progress > prevThreshold;
-                return (
-                  <div key={cat.name} className="flex items-center gap-3 text-sm">
-                    {done ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                    ) : active ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
-                    ) : (
-                      <Circle className="h-4 w-4 text-neutral-300 shrink-0" />
-                    )}
-                    <span className={done ? 'text-neutral-900' : 'text-neutral-500'}>
-                      {cat.name}
-                    </span>
-                    <span className="text-neutral-400 ml-auto">{cat.sourceCount} sources</span>
+        <div style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            <Loader2 style={{ width: 18, height: 18, color: GOLD, animation: 'spin 1s linear infinite' }} />
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'white' }}>Scanning in progress…</span>
+            <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: GOLD }}>{progress}%</span>
+          </div>
+          {/* Progress bar */}
+          <div style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 4, marginBottom: 20, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progress}%`, backgroundColor: GOLD, borderRadius: 4, transition: 'width 500ms ease' }} />
+          </div>
+          {/* Source categories */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {SOURCE_CATEGORIES.map((cat, i) => {
+              const threshold = ((i + 1) / SOURCE_CATEGORIES.length) * 100;
+              const prevThreshold = (i / SOURCE_CATEGORIES.length) * 100;
+              const done = progress >= threshold;
+              const active = !done && progress > prevThreshold;
+              const Icon = cat.icon;
+              return (
+                <div key={cat.name} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 18, height: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {done
+                      ? <CheckCircle2 style={{ width: 16, height: 16, color: '#10b981' }} />
+                      : active
+                      ? <Loader2 style={{ width: 15, height: 15, color: GOLD, animation: 'spin 1s linear infinite' }} />
+                      : <Circle style={{ width: 15, height: 15, color: 'rgba(255,255,255,0.15)' }} />}
                   </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                  <Icon style={{ width: 14, height: 14, color: done ? '#10b981' : active ? GOLD : 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: done ? 'rgba(255,255,255,0.7)' : active ? 'white' : 'rgba(255,255,255,0.25)', flex: 1 }}>
+                    {cat.name}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>{cat.sourceCount} sources</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Failed state */}
-      {scanStatus === 'failed' && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="py-6 text-center">
-            <p className="text-sm font-medium text-red-700">Scan failed</p>
-            <p className="text-xs text-red-500 mt-1">{run?.error_message ?? 'Unknown error'}</p>
-            <Button onClick={startScan} variant="outline" className="mt-4" disabled={starting}>
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
+      {scanStatus === 'failed' && run && (
+        <div style={{
+          backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)',
+          borderRadius: 14, padding: 28, textAlign: 'center',
+        }}>
+          <AlertCircle style={{ width: 36, height: 36, color: '#ef4444', margin: '0 auto 12px' }} />
+          <p style={{ fontSize: 15, fontWeight: 600, color: '#f87171', marginBottom: 6 }}>Scan failed</p>
+          <p style={{ fontSize: 13, color: 'rgba(239,68,68,0.5)', marginBottom: 20 }}>
+            {run.error_message ?? 'Unknown error. Check your API keys in Vercel.'}
+          </p>
+          <button onClick={startScan} disabled={starting} style={{
+            padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.15)',
+            color: 'rgba(255,255,255,0.6)', cursor: 'pointer',
+          }}>
+            Try Again
+          </button>
+        </div>
       )}
 
       {/* Results */}
       {scanStatus === 'completed' && run && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <StatCard label="Total Mentions" value={run.total_mentions?.toLocaleString() ?? '0'} />
-            <StatCard label="Positive" value={`${run.sentiment_summary?.positive ?? 0}%`} color="text-green-600" />
-            <StatCard label="Neutral"   value={`${run.sentiment_summary?.neutral ?? 0}%`}   color="text-neutral-500" />
-            <StatCard label="Negative"  value={`${run.sentiment_summary?.negative ?? 0}%`}  color="text-red-600" />
+          {/* Stats row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            {[
+              { label: 'Total Mentions', value: run.total_mentions?.toString() ?? '0', color: 'white', icon: null },
+              { label: 'Positive', value: `${run.sentiment_summary?.positive ?? 0}`, color: '#10b981', icon: TrendingUp },
+              { label: 'Neutral',  value: `${run.sentiment_summary?.neutral ?? 0}`,  color: 'rgba(255,255,255,0.4)', icon: Minus },
+              { label: 'Negative', value: `${run.sentiment_summary?.negative ?? 0}`, color: '#ef4444', icon: TrendingDown },
+            ].map(({ label, value, color, icon: Icon }) => (
+              <div key={label} style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '18px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>{label}</p>
+                  {Icon && <Icon style={{ width: 14, height: 14, color }} />}
+                </div>
+                <p style={{ fontSize: 28, fontWeight: 800, color, margin: 0 }}>{value}</p>
+                {label !== 'Total Mentions' && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', margin: '4px 0 0' }}>mentions</p>}
+              </div>
+            ))}
           </div>
 
-          <Tabs defaultValue="frames">
-            <TabsList>
-              <TabsTrigger value="frames">Frame Distribution</TabsTrigger>
-              <TabsTrigger value="sentiment">Sentiment</TabsTrigger>
-            </TabsList>
+          {/* Tabs */}
+          <div style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+            {/* Tab bar */}
+            <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, padding: '0 20px' }}>
+              {(['frames', 'sentiment', 'keywords'] as const).map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)} style={{
+                  padding: '14px 16px', fontSize: 13, fontWeight: 600,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: activeTab === tab ? GOLD : 'rgba(255,255,255,0.3)',
+                  borderBottom: activeTab === tab ? `2px solid ${GOLD}` : '2px solid transparent',
+                  marginBottom: -1, textTransform: 'capitalize', transition: 'color 150ms',
+                }}>
+                  {tab === 'frames' ? 'Frame Distribution' : tab === 'sentiment' ? 'Sentiment' : 'Keywords'}
+                </button>
+              ))}
+            </div>
 
-            <TabsContent value="frames">
-              <Card>
-                <CardHeader>
-                  <CardTitle>How you are framed online</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {Object.entries(run.frame_distribution ?? {}).length === 0 ? (
-                    <p className="text-sm text-neutral-500">No frame data available.</p>
-                  ) : (
-                    Object.entries(run.frame_distribution).map(([frame, count]) => {
-                      const total = Object.values(run.frame_distribution).reduce((a, b) => a + b, 0);
-                      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-                      return (
-                        <div key={frame}>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span className="capitalize text-neutral-700">{frame}</span>
-                            <span className="font-medium">{pct}%</span>
-                          </div>
-                          <Progress value={pct} className="h-2" />
-                        </div>
-                      );
-                    })
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="sentiment">
-              <Card>
-                <CardHeader><CardTitle>Sentiment Breakdown</CardTitle></CardHeader>
-                <CardContent className="space-y-3">
-                  {(['positive', 'neutral', 'negative'] as const).map((label) => {
-                    const val = run.sentiment_summary?.[label] ?? 0;
+            <div style={{ padding: 24 }}>
+              {/* Frame Distribution */}
+              {activeTab === 'frames' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', margin: '0 0 4px' }}>
+                    How you are positioned across online sources
+                  </p>
+                  {Object.entries(run.frame_distribution ?? {}).map(([frame, count]) => {
+                    const total = Object.values(run.frame_distribution ?? {}).reduce((a, b) => a + b, 0);
+                    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                    const color = FRAME_COLORS[frame] ?? 'rgba(255,255,255,0.3)';
                     return (
-                      <div key={label}>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="capitalize text-neutral-700">{label}</span>
-                          <span className="font-medium">{val}%</span>
+                      <div key={frame}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', textTransform: 'capitalize', fontWeight: 500 }}>{frame}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color }}>{pct}%</span>
                         </div>
-                        <Progress value={val} className="h-2" />
+                        <div style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 6, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, backgroundColor: color, borderRadius: 6, transition: 'width 800ms ease' }} />
+                        </div>
                       </div>
                     );
                   })}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                </div>
+              )}
 
-          <p className="text-xs text-neutral-400">
+              {/* Sentiment */}
+              {activeTab === 'sentiment' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {[
+                    { key: 'positive', label: 'Positive', color: '#10b981' },
+                    { key: 'neutral',  label: 'Neutral',  color: 'rgba(255,255,255,0.35)' },
+                    { key: 'negative', label: 'Negative', color: '#ef4444' },
+                  ].map(({ key, label, color }) => {
+                    const val = run.sentiment_summary?.[key as keyof typeof run.sentiment_summary] as number ?? 0;
+                    return (
+                      <div key={key}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{label}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color }}>{val}%</span>
+                        </div>
+                        <div style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 6, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${val}%`, backgroundColor: color, borderRadius: 6, transition: 'width 800ms ease' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {run.sentiment_summary?.average !== undefined && (
+                    <div style={{ marginTop: 8, padding: '12px 16px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)' }}>Average Sentiment Score</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: (run.sentiment_summary.average ?? 0) >= 0 ? '#10b981' : '#ef4444' }}>
+                        {(run.sentiment_summary.average ?? 0) >= 0 ? '+' : ''}{run.sentiment_summary.average?.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Keywords */}
+              {activeTab === 'keywords' && (
+                <div>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', marginBottom: 16 }}>Top keywords associated with your profile</p>
+                  {run.top_keywords && run.top_keywords.length > 0 ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {run.top_keywords.map((kw, i) => (
+                        <span key={kw} style={{
+                          padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500,
+                          backgroundColor: i < 3 ? 'rgba(201,168,76,0.1)' : 'rgba(255,255,255,0.05)',
+                          border: `1px solid ${i < 3 ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.07)'}`,
+                          color: i < 3 ? GOLD : 'rgba(255,255,255,0.5)',
+                        }}>
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.2)' }}>No keyword data available.</p>
+                  )}
+
+                  {run.archetype_hints && run.archetype_hints.length > 0 && (
+                    <div style={{ marginTop: 24 }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                        Archetype signals detected
+                      </p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {run.archetype_hints.map(hint => (
+                          <span key={hint} style={{
+                            padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                            backgroundColor: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)',
+                            color: '#a78bfa',
+                          }}>
+                            {hint}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.18)', textAlign: 'right' }}>
             Last scanned {formatDistanceToNow(new Date(run.completed_at ?? run.created_at), { addSuffix: true })}
           </p>
         </>
       )}
 
       {/* Not started */}
-      {scanStatus === 'not_started' && (
-        <Card className="border-dashed">
-          <CardContent className="py-16 text-center">
-            <Search className="h-12 w-12 text-neutral-300 mx-auto mb-4" strokeWidth={1.5} />
-            <h3 className="text-lg font-semibold text-neutral-900 mb-2">No scans run yet</h3>
-            <p className="text-sm text-neutral-500 max-w-sm mx-auto mb-6">
-              Run a discovery scan to audit this profile&apos;s digital footprint across 50+ sources.
-            </p>
-            <Button onClick={startScan} disabled={starting}>
-              <Search className="h-4 w-4 mr-2" />
-              Run Discovery Scan
-            </Button>
-          </CardContent>
-        </Card>
+      {scanStatus === 'not_started' && !starting && (
+        <div style={{
+          backgroundColor: CARD_BG, border: `1px dashed rgba(255,255,255,0.1)`,
+          borderRadius: 14, padding: '64px 32px', textAlign: 'center',
+        }}>
+          <div style={{
+            width: 64, height: 64, borderRadius: 16, margin: '0 auto 20px',
+            backgroundColor: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Search style={{ width: 28, height: 28, color: GOLD }} strokeWidth={1.5} />
+          </div>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: 'white', marginBottom: 10 }}>No scans run yet</h3>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', maxWidth: 360, margin: '0 auto 28px', lineHeight: 1.6 }}>
+            Run a discovery scan to audit this profile's digital footprint across 50+ sources. Takes 2–5 minutes.
+          </p>
+          <button onClick={startScan} disabled={starting} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '11px 24px', borderRadius: 8, fontSize: 14, fontWeight: 700,
+            backgroundColor: GOLD, color: '#080C14', border: 'none',
+            cursor: starting ? 'not-allowed' : 'pointer', opacity: starting ? 0.6 : 1,
+          }}>
+            <Search style={{ width: 15, height: 15 }} />
+            Run Discovery Scan
+          </button>
+        </div>
       )}
-    </div>
-  );
-}
 
-function StatCard({ label, value, color = 'text-neutral-900' }: {
-  label: string; value: string; color?: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-xs text-neutral-500 uppercase tracking-wide">{label}</p>
-        <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
-      </CardContent>
-    </Card>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100% { opacity:.3 } 50% { opacity:.6 } }
+      `}</style>
+    </div>
   );
 }

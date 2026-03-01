@@ -28,10 +28,10 @@ export default async function DashboardLayout({
     'consultant';
 
   return (
-    <div className="flex min-h-screen bg-neutral-50">
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#080C14' }}>
       <SidebarNav user={user} role={role} />
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main style={{ flex: 1, overflow: 'auto' }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
           {children}
         </div>
       </main>

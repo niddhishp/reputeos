@@ -5,21 +5,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import {
-  Search,
-  BarChart2,
-  Target,
-  PenLine,
-  CheckSquare,
-  Shield,
-  Users,
-  UserCircle,
-  Settings,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
+  Search, BarChart2, Target, PenLine, CheckSquare,
+  Shield, Users, UserCircle, Settings, LogOut,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 
 interface SidebarNavProps {
@@ -27,24 +17,20 @@ interface SidebarNavProps {
   role?: string;
 }
 
+const GOLD = '#C9A84C';
+const BG = '#080C14';
+
 export function SidebarNav({ user, role = 'consultant' }: SidebarNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
 
   const isIndividual = role === 'individual';
-
-  // Smart label: individuals see "My Profile", consultants see "Clients"
   const profilesLabel = isIndividual ? 'My Profile' : 'Clients';
   const ProfileIcon = isIndividual ? UserCircle : Users;
 
   const modules = [
-    {
-      label: profilesLabel,
-      href: '/dashboard/clients',
-      icon: ProfileIcon,
-      alwaysShow: true,
-    },
+    { label: profilesLabel, href: '/dashboard/clients', icon: ProfileIcon },
     { label: 'Discover',  hrefPattern: '/discover',  icon: Search },
     { label: 'Diagnose',  hrefPattern: '/diagnose',  icon: BarChart2 },
     { label: 'Position',  hrefPattern: '/position',  icon: Target },
@@ -59,73 +45,95 @@ export function SidebarNav({ user, role = 'consultant' }: SidebarNavProps) {
     router.refresh();
   };
 
-  const displayName =
-    user.user_metadata?.name ||
-    user.email?.split('@')[0] ||
-    'User';
+  const displayName = user.user_metadata?.name || user.email?.split('@')[0] || 'User';
 
   return (
-    <aside
-      className={cn(
-        'flex flex-col bg-white border-r border-neutral-200 transition-all duration-200 min-h-screen',
-        collapsed ? 'w-16' : 'w-56'
-      )}
-    >
+    <aside style={{
+      display: 'flex', flexDirection: 'column', backgroundColor: BG,
+      borderRight: '1px solid rgba(255,255,255,0.06)', minHeight: '100vh',
+      width: collapsed ? 64 : 220, transition: 'width 200ms ease', flexShrink: 0,
+    }}>
+
       {/* Logo */}
-      <div className="flex items-center justify-between p-4 border-b border-neutral-100">
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-blue-600 shrink-0" />
-            <span className="font-bold text-neutral-900">ReputeOS</span>
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'space-between',
+        padding: '16px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+            backgroundColor: 'rgba(201,168,76,0.12)',
+            border: '1px solid rgba(201,168,76,0.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Shield style={{ width: 15, height: 15, color: GOLD }} />
           </div>
-        )}
-        {collapsed && <Shield className="h-6 w-6 text-blue-600 mx-auto" />}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1 rounded hover:bg-neutral-100 text-neutral-400 hover:text-neutral-600"
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
+          {!collapsed && (
+            <span style={{ fontWeight: 800, fontSize: 15, color: 'white', letterSpacing: '-0.3px' }}>
+              ReputeOS
+            </span>
           )}
-        </button>
+        </div>
+        {!collapsed && (
+          <button onClick={() => setCollapsed(true)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'rgba(255,255,255,0.2)', padding: 4, borderRadius: 4,
+            display: 'flex', alignItems: 'center',
+          }}>
+            <ChevronLeft style={{ width: 14, height: 14 }} />
+          </button>
+        )}
+        {collapsed && (
+          <button onClick={() => setCollapsed(false)} style={{
+            position: 'absolute', left: 52,
+            background: BG, border: '1px solid rgba(255,255,255,0.1)',
+            cursor: 'pointer', color: 'rgba(255,255,255,0.4)',
+            padding: '2px 3px', borderRadius: 4,
+            display: 'flex', alignItems: 'center', zIndex: 10,
+          }}>
+            <ChevronRight style={{ width: 11, height: 11 }} />
+          </button>
+        )}
       </div>
 
-      {/* Role badge */}
+      {/* Role pill */}
       {!collapsed && (
-        <div className="px-4 py-2 border-b border-neutral-100">
-          <span className="text-xs font-medium text-neutral-400 uppercase tracking-wide">
+        <div style={{ padding: '7px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <span style={{
+            fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)',
+          }}>
             {isIndividual ? 'Personal' : 'Consultant'}
           </span>
         </div>
       )}
 
-      {/* Nav Items */}
-      <nav className="flex-1 py-4 space-y-1 px-2">
+      {/* Nav links */}
+      <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {modules.map((item) => {
-          const isActive = item.href
+          const isActive = 'href' in item && item.href
             ? pathname.startsWith(item.href)
-            : item.hrefPattern
-            ? pathname.includes(item.hrefPattern)
+            : 'hrefPattern' in item && item.hrefPattern
+            ? pathname.includes(item.hrefPattern as string)
             : false;
-
-          const href = item.href ?? '#';
-
+          const href = ('href' in item ? item.href : '#') as string;
+          const Icon = item.icon;
           return (
-            <Link
-              key={item.label}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
-              )}
-              title={collapsed ? item.label : undefined}
+            <Link key={item.label} href={href} title={collapsed ? item.label : undefined} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: collapsed ? '9px 0' : '9px 12px',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              borderRadius: 8, fontSize: 13, fontWeight: isActive ? 600 : 500,
+              textDecoration: 'none', transition: 'all 150ms',
+              backgroundColor: isActive ? 'rgba(201,168,76,0.1)' : 'transparent',
+              color: isActive ? GOLD : 'rgba(255,255,255,0.4)',
+              border: `1px solid ${isActive ? 'rgba(201,168,76,0.18)' : 'transparent'}`,
+            }}
+            onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.04)'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.75)'; } }}
+            onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.4)'; } }}
             >
-              <item.icon className="h-4 w-4 shrink-0" />
+              <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
               {!collapsed && <span>{item.label}</span>}
             </Link>
           );
@@ -133,38 +141,43 @@ export function SidebarNav({ user, role = 'consultant' }: SidebarNavProps) {
       </nav>
 
       {/* Bottom */}
-      <div className="p-2 border-t border-neutral-100 space-y-1">
-        <Link
-          href="/dashboard/settings"
-          className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 transition-colors',
-            pathname.startsWith('/dashboard/settings') && 'bg-blue-50 text-blue-700'
-          )}
-          title={collapsed ? 'Settings' : undefined}
-        >
-          <Settings className="h-4 w-4 shrink-0" />
+      <div style={{ padding: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <Link href="/dashboard/settings" title={collapsed ? 'Settings' : undefined} style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: collapsed ? '9px 0' : '9px 12px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          borderRadius: 8, fontSize: 13, fontWeight: 500,
+          textDecoration: 'none', marginBottom: 4,
+          backgroundColor: pathname.startsWith('/dashboard/settings') ? 'rgba(201,168,76,0.1)' : 'transparent',
+          color: pathname.startsWith('/dashboard/settings') ? GOLD : 'rgba(255,255,255,0.3)',
+        }}>
+          <Settings style={{ width: 15, height: 15 }} />
           {!collapsed && <span>Settings</span>}
         </Link>
 
-        <div
-          className={cn(
-            'flex items-center gap-3 px-3 py-2',
-            collapsed ? 'justify-center' : ''
-          )}
-        >
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: collapsed ? '6px 0' : '8px 12px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+        }}>
           {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-neutral-900 truncate">{displayName}</p>
-              <p className="text-xs text-neutral-400 truncate">{user.email}</p>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+                {displayName}
+              </p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+                {user.email}
+              </p>
             </div>
           )}
-          <button
-            onClick={handleSignOut}
-            className="p-1.5 rounded text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-            title="Sign out"
-            aria-label="Sign out"
-          >
-            <LogOut className="h-4 w-4" />
+          <button onClick={handleSignOut} title="Sign out" style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'rgba(255,255,255,0.2)', padding: 6, borderRadius: 6,
+            display: 'flex', alignItems: 'center',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ef4444'; (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(239,68,68,0.08)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.2)'; (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}>
+            <LogOut style={{ width: 15, height: 15 }} />
           </button>
         </div>
       </div>
