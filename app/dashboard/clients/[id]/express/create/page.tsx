@@ -16,7 +16,11 @@ import {
   BarChart3,
   Lightbulb,
   Copy,
-  Check
+  Check,
+  Linkedin,
+  Twitter,
+  BookOpen,
+  FileText
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';

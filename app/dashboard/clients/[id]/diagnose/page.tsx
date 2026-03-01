@@ -48,6 +48,7 @@ import { useToast } from '@/components/ui/use-toast';
 
 import { cn } from '@/lib/utils';
 import { useClientStore } from '@/store/client-store';
+import { supabase } from '@/lib/supabase/client';
 
 // Types based on PersonaOS specification
 interface LSIRun {
@@ -199,7 +200,9 @@ function LSIComponentCard({
               className="p-2 rounded-lg"
               style={{ backgroundColor: `${config.color}15` }}
             >
-              <Icon className="h-4 w-4" style={{ color: config.color }} />
+              <span style={{ color: config.color }} className="h-4 w-4 flex items-center">
+                <Icon className="h-4 w-4" />
+              </span>
             </div>
             <div>
               <h4 className="text-label font-medium text-neutral-900">{config.name}</h4>
@@ -434,67 +437,33 @@ export default function DiagnosePage() {
   const fetchLSIData = async () => {
     try {
       setIsLoading(true);
-      // In production, this would fetch from Supabase
-      // const { data, error } = await supabase
-      //   .from('lsi_runs')
-      //   .select('*')
-      //   .eq('client_id', clientId)
-      //   .order('run_date', { ascending: false })
-      //   .limit(2);
-      
-      // Mock data for demonstration
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      const mockCurrent: LSIRun = {
-        id: '1',
-        client_id: clientId,
-        run_date: new Date().toISOString(),
-        total_score: 68,
-        components: {
-          c1: 14.5,
-          c2: 12.3,
-          c3: 15.8,
-          c4: 9.2,
-          c5: 10.1,
-          c6: 6.1
-        },
-        stats: {
-          mean: 65.4,
-          stddev: 8.2,
-          ucl: 81.8,
-          lcl: 49.0
-        },
-        gaps: [
-          { component: 'Media Framing', gap: 7.7, priority: 1 },
-          { component: 'Elite Discourse', gap: 5.8, priority: 2 },
-          { component: 'Third-Party Validation', gap: 4.9, priority: 3 },
-          { component: 'Crisis Moat', gap: 3.9, priority: 4 },
-          { component: 'Search Reputation', gap: 5.5, priority: 5 },
-          { component: 'Social Backlash', gap: 4.2, priority: 6 }
-        ]
-      };
 
-      const mockHistory = Array.from({ length: 12 }, (_, i) => ({
-        date: new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000).toISOString(),
-        score: 60 + Math.random() * 15 + (i * 0.5)
-      })).reverse();
+      // Fetch two most recent LSI runs from Supabase
+      const { data: runs, error } = await supabase
+        .from('lsi_runs')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('run_date', { ascending: false })
+        .limit(2);
 
-      setLsiData(mockCurrent);
-      setHistory(mockHistory);
-      
-      // Mock previous run for trend comparison
-      setPreviousRun({
-        ...mockCurrent,
-        total_score: 62,
-        components: {
-          c1: 13.2,
-          c2: 10.1,
-          c3: 14.5,
-          c4: 8.1,
-          c5: 9.2,
-          c6: 5.9
-        }
-      });
+      if (error) throw error;
+
+      if (runs && runs.length > 0) {
+        setLsiData(runs[0] as LSIRun);
+        if (runs.length > 1) setPreviousRun(runs[1] as LSIRun);
+      }
+
+      // Fetch full history for the trend chart
+      const { data: historyRuns } = await supabase
+        .from('lsi_runs')
+        .select('run_date, total_score')
+        .eq('client_id', clientId)
+        .order('run_date', { ascending: true })
+        .limit(24);
+
+      if (historyRuns) {
+        setHistory(historyRuns.map(r => ({ date: r.run_date, score: r.total_score })));
+      }
     } catch (error) {
       toast({
         title: "Error loading LSI data",

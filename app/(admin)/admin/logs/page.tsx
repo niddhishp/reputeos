@@ -39,17 +39,18 @@ export const metadata = {
 };
 
 interface LogsPageProps {
-  searchParams: {
+  searchParams: Promise<{
     page?: string;
     search?: string;
     action?: string;
-  };
+  }>;
 }
 
 export default async function AdminLogsPage({ searchParams }: LogsPageProps) {
-  const page = parseInt(searchParams.page || '1', 10);
-  const search = searchParams.search;
-  const action = searchParams.action;
+  const params = await searchParams;
+  const page = parseInt(params.page || '1', 10);
+  const search = params.search;
+  const action = params.action;
 
   return (
     <div className="space-y-6">

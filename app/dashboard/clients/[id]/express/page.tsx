@@ -85,8 +85,8 @@ function ContentCard({ content }: { content: ContentItem }) {
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <div className={cn("p-2 rounded-lg", `bg-[${config.color}]/10`)} style={{ backgroundColor: `${config.color}15` }}>
-                <Icon className="h-4 w-4" style={{ color: config.color }} />
+              <div className={cn("p-2 rounded-lg")} style={{ backgroundColor: `${config.color}15` }}>
+                <span style={{ color: config.color }} className="flex items-center"><Icon className="h-4 w-4" /></span>
               </div>
               <Badge variant={content.status === 'published' ? 'default' : content.status === 'scheduled' ? 'secondary' : 'outline'}>
                 {content.status}

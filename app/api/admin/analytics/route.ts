@@ -8,6 +8,14 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/admin/auth';
 import { strictRateLimiter, getClientIP, createRateLimitResponse } from '@/lib/ratelimit';
 
+interface SupabaseAdminUser {
+  id: string;
+  email?: string;
+  created_at: string;
+  banned_at?: string | null;
+  user_metadata?: Record<string, unknown>;
+}
+
 export async function GET(request: Request): Promise<Response> {
   try {
     // Rate limiting
@@ -41,15 +49,15 @@ export async function GET(request: Request): Promise<Response> {
     });
 
     const totalUsers = usersData?.total || 0;
-    const activeUsers = usersData?.users.filter((u) => !u.banned_at).length || 0;
+    const activeUsers = usersData?.users.filter((u: SupabaseAdminUser) => !u.banned_at).length || 0;
     const adminUsers =
       usersData?.users.filter(
-        (u) => u.user_metadata?.role === 'admin' || u.user_metadata?.role === 'superadmin'
+        (u: SupabaseAdminUser) => u.user_metadata?.role === 'admin' || u.user_metadata?.role === 'superadmin'
       ).length || 0;
 
     // New users in date range
     const newUsersInRange =
-      usersData?.users.filter((u) => new Date(u.created_at) >= startDate).length || 0;
+      usersData?.users.filter((u: SupabaseAdminUser) => new Date(u.created_at) >= startDate).length || 0;
 
     // Get database stats
     const [
@@ -80,16 +88,22 @@ export async function GET(request: Request): Promise<Response> {
       activityByType[activity.action] = (activityByType[activity.action] || 0) + 1;
     });
 
-    // Get content stats
-    const { data: contentByPlatform } = await supabase
+    // Get content stats (aggregate client-side since Supabase JS doesn't support GROUP BY directly)
+    const { data: allContentItems } = await supabase
       .from('content_items')
-      .select('platform, count')
-      .group('platform');
+      .select('platform, status');
 
-    const { data: contentByStatus } = await supabase
-      .from('content_items')
-      .select('status, count')
-      .group('status');
+    const contentByPlatform = allContentItems?.reduce((acc: Record<string, number>, item: { platform: string | null }) => {
+      const p = item.platform ?? 'unknown';
+      acc[p] = (acc[p] || 0) + 1;
+      return acc;
+    }, {}) ?? {};
+
+    const contentByStatus = allContentItems?.reduce((acc: Record<string, number>, item: { status: string | null }) => {
+      const s = item.status ?? 'unknown';
+      acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {}) ?? {};
 
     // Get daily signups for the date range
     const dailySignups: Record<string, number> = {};
@@ -100,7 +114,7 @@ export async function GET(request: Request): Promise<Response> {
       dailySignups[dateStr] = 0;
     }
 
-    usersData?.users.forEach((user) => {
+    usersData?.users.forEach((user: SupabaseAdminUser) => {
       const dateStr = user.created_at.split('T')[0];
       if (dailySignups[dateStr] !== undefined) {
         dailySignups[dateStr]++;
@@ -112,7 +126,7 @@ export async function GET(request: Request): Promise<Response> {
     recentActivity?.forEach((activity) => {
       if (activity.user_id) {
         if (!userActivity[activity.user_id]) {
-          const user = usersData?.users.find((u) => u.id === activity.user_id);
+          const user = usersData?.users.find((u: SupabaseAdminUser) => u.id === activity.user_id);
           userActivity[activity.user_id] = {
             email: user?.email || 'Unknown',
             count: 0,

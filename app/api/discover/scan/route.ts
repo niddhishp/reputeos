@@ -406,7 +406,7 @@ async function simulateSourceScan(
  */
 async function analyzeMentions(
   clientName: string,
-  mentions: Array<{ source: string; snippet: string }>
+  mentions: Array<{ source: string; snippet: string; sentiment?: number; frame?: string }>
 ): Promise<{
   sentimentSummary: { positive: number; neutral: number; negative: number; average: number };
   frameDistribution: Record<string, number>;
@@ -428,17 +428,17 @@ async function analyzeMentions(
     const frameCounts: Record<string, number> = {};
 
     mentions.forEach((m) => {
-      const sentiment = m.sentiment;
+      const sentiment = m.sentiment ?? 0;
       if (sentiment > 0.2) sentimentCounts.positive++;
       else if (sentiment < -0.2) sentimentCounts.negative++;
       else sentimentCounts.neutral++;
 
-      const frame = (m as { frame: string }).frame;
+      const frame = m.frame ?? 'other';
       frameCounts[frame] = (frameCounts[frame] || 0) + 1;
     });
 
     const averageSentiment =
-      mentions.reduce((sum, m) => sum + m.sentiment, 0) / mentions.length;
+      mentions.reduce((sum, m) => sum + (m.sentiment ?? 0), 0) / mentions.length;
 
     return {
       sentimentSummary: {

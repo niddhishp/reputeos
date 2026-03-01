@@ -69,12 +69,20 @@ export default async function AdminDashboardPage() {
 async function AnalyticsCards() {
   const analytics = await getSystemAnalytics();
 
-  const cards = [
+  const cards: Array<{
+    title: string;
+    value: number;
+    change: string;
+    trend: 'up' | 'neutral' | 'down';
+    icon: React.ComponentType<{ className?: string }>;
+    href: string;
+    color: 'blue' | 'green' | 'orange' | 'purple';
+  }> = [
     {
       title: 'Total Users',
       value: analytics.totalUsers,
       change: `+${analytics.newUsersToday} today`,
-      trend: 'up' as const,
+      trend: 'up',
       icon: Users,
       href: '/admin/users',
       color: 'blue',
@@ -83,7 +91,7 @@ async function AnalyticsCards() {
       title: 'Active Users',
       value: analytics.activeUsers,
       change: `${Math.round((analytics.activeUsers / analytics.totalUsers) * 100)}% of total`,
-      trend: 'neutral' as const,
+      trend: 'neutral',
       icon: Activity,
       href: '/admin/users',
       color: 'green',
@@ -92,7 +100,7 @@ async function AnalyticsCards() {
       title: 'Total Clients',
       value: analytics.totalClients,
       change: 'Across all users',
-      trend: 'neutral' as const,
+      trend: 'neutral',
       icon: Briefcase,
       href: '/admin/clients',
       color: 'purple',
@@ -101,7 +109,7 @@ async function AnalyticsCards() {
       title: 'Content Items',
       value: analytics.totalContentItems,
       change: `${analytics.totalLSIRuns} LSI runs`,
-      trend: 'up' as const,
+      trend: 'up',
       icon: FileText,
       href: '/admin/analytics',
       color: 'orange',

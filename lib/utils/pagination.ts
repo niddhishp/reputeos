@@ -72,7 +72,7 @@ export async function paginate<T>(
 
   // Get the next cursor from the last item
   const nextCursor = hasMore
-    ? (paginatedItems[paginatedItems.length - 1] as Record<string, unknown>)[orderBy] as string
+    ? ((paginatedItems[paginatedItems.length - 1] as unknown) as Record<string, unknown>)[orderBy] as string
     : null;
 
   return {

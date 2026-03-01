@@ -38,6 +38,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase/client';
 
 type AlertSeverity = 'info' | 'warning' | 'critical';
 type AlertType = 'crisis' | 'volume_spike' | 'sentiment_drop' | 'narrative_drift';
@@ -77,64 +78,56 @@ export default function ShieldPage() {
   const [selectedAlert, setSelectedAlert] = useState<AlertItem | null>(null);
 
   useEffect(() => {
-    // Simulate loading data
-    setTimeout(() => {
-      setAlerts([
-        {
-          id: '1',
-          type: 'volume_spike',
-          severity: 'warning',
-          title: 'Unusual Mention Volume',
-          message: 'Mentions increased 340% in the last 24 hours due to industry conference coverage.',
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          status: 'new'
-        },
-        {
-          id: '2',
-          type: 'sentiment_drop',
-          severity: 'critical',
-          title: 'Sentiment Drop Detected',
-          message: 'Negative sentiment increased to 35% following product announcement criticism.',
-          timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-          status: 'acknowledged'
-        },
-        {
-          id: '3',
-          type: 'narrative_drift',
-          severity: 'info',
-          title: 'Narrative Drift',
-          message: 'Competitor attempting to reframe your sustainability initiative as "greenwashing".',
-          timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-          status: 'resolved'
-        }
-      ]);
+    // Fetch real data from Supabase
+    async function fetchData() {
+      try {
+        const [alertsRes, competitorsRes] = await Promise.all([
+          supabase.from('alerts').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(50),
+          supabase.from('competitors').select('*').eq('client_id', clientId).order('updated_at', { ascending: false }),
+        ]);
 
-      setCompetitors([
-        {
-          id: '1',
-          name: 'Rahul Sharma',
-          company: 'TechVentures Inc',
-          currentLSI: 64,
-          lsiChange: -3,
-          contentVolume: 24,
-          archetype: 'visionary',
-          lastActivity: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: '2',
-          name: 'Priya Patel',
-          company: 'InnovateCo',
-          currentLSI: 71,
-          lsiChange: +5,
-          contentVolume: 32,
-          archetype: 'disruptor',
-          lastActivity: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+        if (alertsRes.data) {
+          setAlerts(alertsRes.data.map(a => ({
+            id: a.id, type: a.type as AlertType, severity: a.severity as AlertSeverity,
+            title: a.title, message: a.message ?? '', timestamp: a.created_at, status: a.status,
+          })));
         }
-      ]);
+        if (competitorsRes.data) {
+          setCompetitors(competitorsRes.data.map(c => ({
+            id: c.id, name: c.name, company: c.company ?? '',
+            currentLSI: c.current_lsi ?? 0, lsiChange: 0, contentVolume: c.content_volume_per_month ?? 0,
+            archetype: c.archetype ?? 'unknown', lastActivity: c.updated_at,
+          })));
+        }
+      } catch (err) {
+        console.error('shield fetch error', err);
+      } finally {
+        setLoading(false);
+      }
+    }
 
-      setLoading(false);
-    }, 800);
-  }, []);
+    fetchData();
+
+    // Real-time subscription for new alerts
+    const subscription = supabase
+      .channel(`alerts-${clientId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alerts', filter: `client_id=eq.${clientId}` },
+        (payload) => {
+          const newAlert = payload.new as Record<string, unknown>;
+          setAlerts(prev => [{
+            id: newAlert.id as string, type: newAlert.type as AlertType,
+            severity: newAlert.severity as AlertSeverity, title: newAlert.title as string,
+            message: (newAlert.message as string) ?? '', timestamp: newAlert.created_at as string,
+            status: (newAlert.status as AlertItem['status']) ?? 'new',
+          }, ...prev]);
+          if (newAlert.severity === 'critical') {
+            toast({ title: '🚨 Critical Alert', description: newAlert.title as string, variant: 'destructive' });
+          }
+        })
+      .subscribe();
+
+    return () => { subscription.unsubscribe(); };
+  }, [clientId]);
 
   const acknowledgeAlert = (alertId: string) => {
     setAlerts(prev => prev.map(a => 

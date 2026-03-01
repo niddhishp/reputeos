@@ -7,6 +7,17 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/server';
 
+// Supabase Admin API user shape (superset of the public User type)
+interface AdminApiUser {
+  id: string;
+  email?: string;
+  created_at: string;
+  last_sign_in_at?: string | null;
+  banned_at?: string | null;
+  email_confirmed_at?: string | null;
+  user_metadata?: Record<string, unknown>;
+}
+
 export type UserRole = 'user' | 'admin' | 'superadmin';
 
 export interface AdminUser {
@@ -101,12 +112,12 @@ export async function getAllUsers(options: {
     throw error;
   }
 
-  let users = data.users.map((user): AdminUser => ({
+  let users = data.users.map((user: AdminApiUser): AdminUser => ({
     id: user.id,
     email: user.email || '',
     role: (user.user_metadata?.role as UserRole) || 'user',
     created_at: user.created_at,
-    last_sign_in_at: user.last_sign_in_at,
+    last_sign_in_at: user.last_sign_in_at ?? null,
     is_active: !user.banned_at,
   }));
 
@@ -114,18 +125,18 @@ export async function getAllUsers(options: {
   if (search) {
     const searchLower = search.toLowerCase();
     users = users.filter(
-      (u) =>
+      (u: AdminUser) =>
         u.email.toLowerCase().includes(searchLower) ||
         u.id.toLowerCase().includes(searchLower)
     );
   }
 
   if (role) {
-    users = users.filter((u) => u.role === role);
+    users = users.filter((u: AdminUser) => u.role === role);
   }
 
   if (status !== 'all') {
-    users = users.filter((u) =>
+    users = users.filter((u: AdminUser) =>
       status === 'active' ? u.is_active : !u.is_active
     );
   }
@@ -212,13 +223,13 @@ export async function getSystemAnalytics(): Promise<{
 
   const totalUsers = usersData?.total || 0;
   const activeUsers =
-    usersData?.users.filter((u) => !u.banned_at).length || 0;
+    usersData?.users.filter((u: AdminApiUser) => !u.banned_at).length || 0;
 
   // New users today
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const newUsersToday =
-    usersData?.users.filter((u) => new Date(u.created_at) >= today).length || 0;
+    usersData?.users.filter((u: AdminApiUser) => new Date(u.created_at) >= today).length || 0;
 
   // Get database stats
   const [{ count: totalClients }, { count: totalContentItems }, { count: totalLSIRuns }] =
@@ -230,14 +241,14 @@ export async function getSystemAnalytics(): Promise<{
 
   // Recent signups
   const recentSignups = (usersData?.users || [])
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .sort((a: AdminApiUser, b: AdminApiUser) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 5)
-    .map((user): AdminUser => ({
+    .map((user: AdminApiUser): AdminUser => ({
       id: user.id,
       email: user.email || '',
       role: (user.user_metadata?.role as UserRole) || 'user',
       created_at: user.created_at,
-      last_sign_in_at: user.last_sign_in_at,
+      last_sign_in_at: user.last_sign_in_at ?? null,
       is_active: !user.banned_at,
     }));
 

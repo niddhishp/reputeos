@@ -10,6 +10,16 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { requireAdmin, requireSuperAdmin, UserRole } from '@/lib/admin/auth';
 import { strictRateLimiter, getClientIP, createRateLimitResponse } from '@/lib/ratelimit';
 
+interface SupabaseAdminUser {
+  id: string;
+  email?: string;
+  created_at: string;
+  last_sign_in_at?: string | null;
+  banned_at?: string | null;
+  email_confirmed_at?: string | null;
+  user_metadata?: Record<string, unknown>;
+}
+
 // GET - List all users
 export async function GET(request: Request): Promise<Response> {
   try {
@@ -53,7 +63,8 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     // Transform and filter users
-    let users = data.users.map((user) => ({
+    interface MappedUser { id: string; email: string | undefined; role: string; created_at: string; last_sign_in_at: string | null | undefined; is_active: boolean; email_confirmed_at: string | null | undefined; }
+    let users: MappedUser[] = data.users.map((user: SupabaseAdminUser) => ({
       id: user.id,
       email: user.email,
       role: (user.user_metadata?.role as UserRole) || 'user',
@@ -67,18 +78,18 @@ export async function GET(request: Request): Promise<Response> {
     if (search) {
       const searchLower = search.toLowerCase();
       users = users.filter(
-        (u) =>
+        (u: MappedUser) =>
           u.email?.toLowerCase().includes(searchLower) ||
           u.id.toLowerCase().includes(searchLower)
       );
     }
 
     if (role) {
-      users = users.filter((u) => u.role === role);
+      users = users.filter((u: MappedUser) => u.role === role);
     }
 
     if (status) {
-      users = users.filter((u) => (status === 'active' ? u.is_active : !u.is_active));
+      users = users.filter((u: MappedUser) => (status === 'active' ? u.is_active : !u.is_active));
     }
 
     return Response.json({

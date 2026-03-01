@@ -48,19 +48,20 @@ export const metadata = {
 };
 
 interface UsersPageProps {
-  searchParams: {
+  searchParams: Promise<{
     page?: string;
     search?: string;
     role?: string;
     status?: string;
-  };
+  }>;
 }
 
 export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
-  const page = parseInt(searchParams.page || '1', 10);
-  const search = searchParams.search;
-  const role = searchParams.role as any;
-  const status = searchParams.status as any;
+  const params = await searchParams;
+  const page = parseInt(params.page || '1', 10);
+  const search = params.search;
+  const role = params.role as any;
+  const status = params.status as any;
 
   return (
     <div className="space-y-6">

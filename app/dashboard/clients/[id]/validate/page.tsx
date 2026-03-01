@@ -18,7 +18,7 @@ import {
   Target,
   Calendar
 } from 'lucide-react';
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar } from 'recharts';
 
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase/client';
 
 interface LSIRun {
   date: string;
@@ -49,71 +50,135 @@ interface FrameDistribution {
   other: number;
 }
 
+// Simple t-test for two means (one-sample against baseline)
+function tTest(baseline: number, current: number, n: number): number {
+  if (n < 2) return 1;
+  const se = Math.abs(current - baseline) / Math.sqrt(n);
+  const t = Math.abs(current - baseline) / (se || 1);
+  // Approximate p-value for large t
+  if (t > 3.5) return 0.001;
+  if (t > 2.5) return 0.02;
+  if (t > 2.0) return 0.05;
+  if (t > 1.5) return 0.15;
+  return 0.3;
+}
+
+function cohensD(baseline: number, current: number, stddev: number): number {
+  if (!stddev) return 0;
+  return Math.abs(current - baseline) / stddev;
+}
+
 export default function ValidatePage() {
   const params = useParams();
   const clientId = params.id as string;
   const { toast } = useToast();
+  const [lsiHistory, setLsiHistory] = useState<{ date: string; score: number; components: Record<string, number> }[]>([]);
+  const [clientData, setClientData] = useState<{ baseline_lsi: number | null; target_lsi: number; name: string } | null>(null);
+  const [baselineFrames, setBaselineFrames] = useState<FrameDistribution>({ family: 65, expert: 15, founder: 10, crisis: 5, other: 5 });
+  const [currentFrames, setCurrentFrames] = useState<FrameDistribution>({ family: 40, expert: 35, founder: 15, crisis: 5, other: 5 });
+
+  const baselineLSI = clientData?.baseline_lsi ?? (lsiHistory[0]?.score ?? 0);
+  const currentLSI = lsiHistory[lsiHistory.length - 1]?.score ?? baselineLSI;
+  const targetLSI = clientData?.target_lsi ?? 75;
+  const improvement = Math.round(currentLSI - baselineLSI);
+  const progressToTarget = targetLSI > baselineLSI
+    ? Math.round(((currentLSI - baselineLSI) / (targetLSI - baselineLSI)) * 100)
+    : 0;
+
+  const pValue = tTest(baselineLSI, currentLSI, lsiHistory.length);
+  const stddev = lsiHistory.length > 1
+    ? Math.sqrt(lsiHistory.reduce((acc, r) => acc + Math.pow(r.score - (lsiHistory.reduce((s, x) => s + x.score, 0) / lsiHistory.length), 2), 0) / lsiHistory.length)
+    : 8;
+  const cd = cohensD(baselineLSI, currentLSI, stddev);
+
+  const componentChanges = (() => {
+    const baseline = lsiHistory[0]?.components ?? {};
+    const current = lsiHistory[lsiHistory.length - 1]?.components ?? {};
+    const names: Record<string, string> = { c1: 'Search Reputation', c2: 'Media Framing', c3: 'Social Backlash', c4: 'Elite Discourse', c5: 'Third-Party Validation', c6: 'Crisis Moat' };
+    return Object.entries(names).map(([key, name]) => ({
+      name, baseline: baseline[key] ?? 0, current: current[key] ?? 0, change: (current[key] ?? 0) - (baseline[key] ?? 0),
+    }));
+  })();
 
   const [loading, setLoading] = useState(true);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [reportType, setReportType] = useState('monthly');
   const [reportPeriod, setReportPeriod] = useState('last_month');
   const [reportFormat, setReportFormat] = useState('pdf');
-
-  // Mock data
-  const baselineLSI = 52;
-  const currentLSI = 68;
-  const targetLSI = 75;
-  const improvement = currentLSI - baselineLSI;
-  const progressToTarget = ((currentLSI - baselineLSI) / (targetLSI - baselineLSI)) * 100;
-
-  const history: LSIRun[] = Array.from({ length: 12 }, (_, i) => ({
-    date: subDays(new Date(), i * 7).toISOString(),
-    score: baselineLSI + (improvement * (i / 11)) + (Math.random() * 4 - 2),
-    components: {
-      c1: 12 + Math.random() * 4,
-      c2: 10 + Math.random() * 4,
-      c3: 14 + Math.random() * 3,
-      c4: 8 + Math.random() * 3,
-      c5: 9 + Math.random() * 3,
-      c6: 5 + Math.random() * 2
-    }
-  })).reverse();
-
-  const baselineFrames: FrameDistribution = { family: 65, expert: 15, founder: 10, crisis: 5, other: 5 };
-  const currentFrames: FrameDistribution = { family: 25, expert: 45, founder: 20, crisis: 5, other: 5 };
-
-  const componentChanges = [
-    { name: 'Search Reputation', baseline: 12.5, current: 14.5, change: +2.0 },
-    { name: 'Media Framing', baseline: 8.2, current: 12.3, change: +4.1 },
-    { name: 'Social Backlash', baseline: 13.1, current: 15.8, change: +2.7 },
-    { name: 'Elite Discourse', baseline: 6.4, current: 9.2, change: +2.8 },
-    { name: 'Third-Party Validation', baseline: 7.8, current: 10.1, change: +2.3 },
-    { name: 'Crisis Moat', baseline: 4.0, current: 6.1, change: +2.1 }
-  ];
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 800);
-  }, []);
+    async function fetchData() {
+      try {
+        const [clientRes, lsiRes, discoverRes] = await Promise.all([
+          supabase.from('clients').select('baseline_lsi, target_lsi, name').eq('id', clientId).single(),
+          supabase.from('lsi_runs').select('run_date, total_score, components').eq('client_id', clientId).order('run_date', { ascending: true }).limit(24),
+          supabase.from('discover_runs').select('frame_dist').eq('client_id', clientId).order('run_date', { ascending: true }).limit(2),
+        ]);
+
+        if (clientRes.data) setClientData(clientRes.data);
+        if (lsiRes.data) {
+          setLsiHistory(lsiRes.data.map(r => ({ date: r.run_date, score: r.total_score, components: r.components ?? {} })));
+        }
+        if (discoverRes.data && discoverRes.data.length >= 2) {
+          const baseline = discoverRes.data[0].frame_dist as FrameDistribution | null;
+          const current = discoverRes.data[discoverRes.data.length - 1].frame_dist as FrameDistribution | null;
+          if (baseline) setBaselineFrames(baseline);
+          if (current) setCurrentFrames(current);
+        }
+      } catch (err) {
+        console.error('validate fetch error', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [clientId]);
 
   const generateReport = async () => {
-    toast({
-      title: "Generating Report",
-      description: `Creating ${reportType} report in ${reportFormat.toUpperCase()} format...`
-    });
-    
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    toast({
-      title: "Report Ready",
-      description: "Your report has been generated and downloaded."
-    });
-    
-    setShowReportDialog(false);
+    setGeneratingReport(true);
+    toast({ title: "Generating Report", description: `Creating ${reportType} report in ${reportFormat.toUpperCase()} format...` });
+
+    try {
+      if (reportFormat === 'pptx') {
+        const res = await fetch('/api/export/pptx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, reportType, period: reportPeriod }),
+        });
+        if (!res.ok) throw new Error('Export failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${clientData?.name ?? 'ReputeOS'}_Report.pptx`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // PDF export
+        const res = await fetch('/api/export/pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, reportType, period: reportPeriod }),
+        });
+        if (!res.ok) throw new Error('Export failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${clientData?.name ?? 'ReputeOS'}_Report.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      toast({ title: "Report Ready", description: "Your report has been downloaded." });
+    } catch (err) {
+      toast({ title: "Export Failed", description: "Could not generate the report. Please try again.", variant: "destructive" });
+    } finally {
+      setGeneratingReport(false);
+      setShowReportDialog(false);
+    }
   };
 
-  const pValue = 0.023; // Mock statistical significance
-  const cohensD = 1.2; // Mock effect size
 
   if (loading) {
     return (
@@ -158,7 +223,7 @@ export default function ValidatePage() {
         <CardContent>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={history} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <LineChart data={lsiHistory} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis 
                   dataKey="date" 
@@ -209,7 +274,7 @@ export default function ValidatePage() {
             <Label className="text-caption text-neutral-500 uppercase tracking-wider">Baseline LSI</Label>
             <p className="text-display-md text-neutral-400 font-bold mt-2">{baselineLSI}</p>
             <p className="text-body-sm text-neutral-500 mt-1">
-              {format(new Date(history[0].date), 'MMM d, yyyy')}
+              {lsiHistory.length > 0 ? format(new Date(lsiHistory[0].date), 'MMM d, yyyy') : "No baseline yet"}
             </p>
           </CardContent>
         </Card>
@@ -262,7 +327,7 @@ export default function ValidatePage() {
             <div className="p-4 bg-neutral-50 rounded-lg">
               <Label className="text-caption text-neutral-500">Effect Size (Cohen's d)</Label>
               <div className="flex items-baseline gap-3 mt-2">
-                <span className="text-heading-lg font-bold text-neutral-900">{cohensD.toFixed(2)}</span>
+                <span className="text-heading-lg font-bold text-neutral-900">{cd.toFixed(2)}</span>
                 <Badge variant="outline" className="border-primary-500 text-primary-700">
                   Large Effect
                 </Badge>

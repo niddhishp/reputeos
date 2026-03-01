@@ -14,7 +14,7 @@ import { strictRateLimiter, getClientIP, createRateLimitResponse } from '@/lib/r
 // GET - Get user details
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   try {
     // Rate limiting
@@ -33,7 +33,7 @@ export async function GET(
     // Check admin access
     await requireAdmin();
 
-    const { id } = params;
+    const { id } = await params;
 
     // Get user
     const adminSupabase = createAdminClient();
@@ -115,7 +115,7 @@ const UpdateUserSchema = z.object({
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   try {
     // Rate limiting
@@ -131,7 +131,7 @@ export async function PATCH(
       });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const parsed = UpdateUserSchema.safeParse(body);
 
@@ -229,7 +229,7 @@ export async function PATCH(
 // DELETE - Delete user
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   try {
     // Rate limiting
@@ -248,7 +248,7 @@ export async function DELETE(
     // Require superadmin for deletion
     await requireSuperAdmin();
 
-    const { id } = params;
+    const { id } = await params;
 
     // Get current user to prevent self-deletion
     const supabase = await createClient();

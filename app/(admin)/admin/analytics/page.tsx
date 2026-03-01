@@ -16,12 +16,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 
-export const metadata = {
-  title: 'Analytics | Admin | ReputeOS',
-  description: 'System analytics and insights',
-};
-
-export default async function AdminAnalyticsPage() {
+export default function AdminAnalyticsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}

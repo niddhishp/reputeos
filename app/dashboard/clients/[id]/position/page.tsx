@@ -967,7 +967,7 @@ export default function PositionPage() {
                 {Object.entries(positioning?.followability_factors || {}).slice(0, 3).map(([key, value]) => (
                   <div key={key} className="flex justify-between text-caption">
                     <span className="text-neutral-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                    <span className="font-medium text-neutral-700">{value}%</span>
+                    <span className="font-medium text-neutral-700">{Number(value)}%</span>
                   </div>
                 ))}
               </div>
@@ -999,21 +999,21 @@ export default function PositionPage() {
             <CardDescription>Strategic themes for consistent content creation</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {positioning?.content_pillars.map((pillar, i) => (
+            {positioning?.content_pillars.map((pillar: ContentPillar, i: number) => (
               <div key={i} className="p-4 bg-neutral-50 rounded-lg border border-neutral-200">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-heading-sm font-semibold text-neutral-900">{pillar.name}</h4>
                   <Badge variant="outline">{pillar.frequency}</Badge>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {pillar.themes.map(theme => (
+                  {pillar.themes.map((theme: string) => (
                     <span key={theme} className="text-caption bg-white text-neutral-600 px-2 py-1 rounded border border-neutral-200">
                       {theme}
                     </span>
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  {pillar.formats.map(format => (
+                  {pillar.formats.map((format: string) => (
                     <span key={format} className="text-caption text-neutral-500">
                       {format}
                     </span>
@@ -1035,7 +1035,7 @@ export default function PositionPage() {
             <CardDescription>Reusable closing phrases</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {positioning?.signature_lines.map((line, i) => (
+            {positioning?.signature_lines.map((line: string, i: number) => (
               <div key={i} className="flex items-center justify-between p-3 bg-neutral-50 rounded border border-neutral-200 group">
                 <span className="text-body-sm text-neutral-700">{line}</span>
                 <Button 
@@ -1079,7 +1079,7 @@ export default function PositionPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {positioning?.target_influencers.map((influencer, i) => (
+            {positioning?.target_influencers.map((influencer: TargetInfluencer, i: number) => (
               <div key={i} className="flex items-start gap-4 p-4 bg-neutral-50 rounded-lg border border-neutral-200">
                 <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-heading-sm">
                   {influencer.name.charAt(0)}
@@ -1088,7 +1088,7 @@ export default function PositionPage() {
                   <h4 className="text-body font-semibold text-neutral-900">{influencer.name}</h4>
                   <p className="text-caption text-neutral-500 capitalize mb-2">{influencer.archetype} archetype</p>
                   <div className="flex flex-wrap gap-1 mb-2">
-                    {influencer.platforms.map(platform => (
+                    {influencer.platforms.map((platform: string) => (
                       <Badge key={platform} variant="secondary" className="text-caption">
                         {platform}
                       </Badge>
