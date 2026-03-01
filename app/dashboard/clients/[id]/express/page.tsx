@@ -30,6 +30,15 @@ interface Positioning {
   content_pillars: Array<{ name: string; themes: string[] }>;
 }
 
+interface InfluencerTemplate {
+  id: string;
+  name: string;
+  archetype: string;
+  aspiration_score: number;
+  content_template: string;
+  style_adaptation_notes: string;
+}
+
 // ─── Platform config ──────────────────────────────────────────────────────────
 
 const PLATFORMS = [
@@ -229,17 +238,19 @@ function ContentViewer({ item, onClose, onDelete }: {
 
 // ─── Create Panel ─────────────────────────────────────────────────────────────
 
-function CreatePanel({ clientId, positioning, onCreated }: {
+function CreatePanel({ clientId, positioning, influencerTemplates, onCreated }: {
   clientId: string;
   positioning: Positioning | null;
+  influencerTemplates: InfluencerTemplate[];
   onCreated: (item: ContentItem) => void;
 }) {
-  const [platform,  setPlatform]  = useState<PlatformId>('linkedin_long');
-  const [tone,      setTone]      = useState('authoritative');
-  const [topic,     setTopic]     = useState('');
-  const [generating,setGenerating]= useState(false);
-  const [error,     setError]     = useState('');
-  const [result,    setResult]    = useState<ContentItem | null>(null);
+  const [platform,    setPlatform]    = useState<PlatformId>('linkedin_long');
+  const [tone,        setTone]        = useState('authoritative');
+  const [topic,       setTopic]       = useState('');
+  const [templateId,  setTemplateId]  = useState<string>('');
+  const [generating,  setGenerating]  = useState(false);
+  const [error,       setError]       = useState('');
+  const [result,      setResult]      = useState<ContentItem | null>(null);
 
   const pillars = positioning?.content_pillars ?? [];
 
@@ -249,7 +260,7 @@ function CreatePanel({ clientId, positioning, onCreated }: {
     try {
       const res  = await fetch('/api/content/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, platform, topic, tone }),
+        body: JSON.stringify({ clientId, platform, topic, tone, templateId: templateId || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || 'Generation failed');
@@ -329,6 +340,48 @@ function CreatePanel({ clientId, positioning, onCreated }: {
         </div>
       </div>
 
+      {/* Influencer template selector */}
+      {influencerTemplates.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Style Template <span style={{ color: GOLD, fontWeight: 400 }}>(optional)</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setTemplateId('')}
+              style={{
+                padding: '7px 13px', borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                border: `1px solid ${!templateId ? GOLD : BORDER}`,
+                background: !templateId ? `${GOLD}12` : 'transparent',
+                color: !templateId ? GOLD : 'rgba(255,255,255,0.4)',
+              }}>
+              My Own Style
+            </button>
+            {influencerTemplates.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTemplateId(t.id)}
+                style={{
+                  padding: '7px 13px', borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                  border: `1px solid ${templateId === t.id ? '#818cf8' : BORDER}`,
+                  background: templateId === t.id ? 'rgba(129,140,248,0.12)' : 'transparent',
+                  color: templateId === t.id ? '#818cf8' : 'rgba(255,255,255,0.4)',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}>
+                {t.name}
+                <span style={{ fontSize: 10, opacity: 0.6 }}>·{t.aspiration_score}/100</span>
+              </button>
+            ))}
+          </div>
+          {templateId && influencerTemplates.find(t => t.id === templateId)?.style_adaptation_notes && (
+            <div style={{ marginTop: 10, padding: '9px 12px', background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.15)', borderRadius: 8, fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+              <span style={{ color: '#818cf8', fontWeight: 600 }}>Adaptation: </span>
+              {influencerTemplates.find(t => t.id === templateId)?.style_adaptation_notes}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Topic input */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Topic / Theme</div>
@@ -401,8 +454,9 @@ export default function ExpressPage() {
   const router   = useRouter();
   const clientId = params.id as string;
 
-  const [items,       setItems]       = useState<ContentItem[]>([]);
-  const [positioning, setPositioning] = useState<Positioning | null>(null);
+  const [items,               setItems]               = useState<ContentItem[]>([]);
+  const [positioning,         setPositioning]         = useState<Positioning | null>(null);
+  const [influencerTemplates, setInfluencerTemplates] = useState<InfluencerTemplate[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState<'all' | 'draft' | 'published'>('all');
   const [viewing,     setViewing]     = useState<ContentItem | null>(null);
@@ -410,12 +464,15 @@ export default function ExpressPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: pos }, { data: content }] = await Promise.all([
+    const [{ data: pos }, { data: content }, { data: templates }] = await Promise.all([
       supabase.from('positioning').select('personal_archetype, content_pillars').eq('client_id', clientId).maybeSingle(),
       supabase.from('content_items').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(50),
+      supabase.from('influencer_profiles').select('id, name, archetype, aspiration_score, content_template, style_adaptation_notes')
+        .eq('client_id', clientId).eq('scan_status', 'completed').order('aspiration_score', { ascending: false }),
     ]);
     setPositioning(pos as Positioning ?? null);
     setItems((content ?? []) as ContentItem[]);
+    setInfluencerTemplates((templates ?? []) as InfluencerTemplate[]);
     setLoading(false);
   }, [clientId]);
 
@@ -468,6 +525,7 @@ export default function ExpressPage() {
         <CreatePanel
           clientId={clientId}
           positioning={positioning}
+          influencerTemplates={influencerTemplates}
           onCreated={onCreated}
         />
       )}

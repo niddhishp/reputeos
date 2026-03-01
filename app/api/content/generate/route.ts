@@ -85,12 +85,14 @@ export async function POST(request: Request): Promise<Response> {
   const isOwner = await verifyClientOwnership(clientId);
   if (!isOwner) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-  // ── Fetch positioning + template ──────────────────────────────────────────
+  // ── Fetch positioning + influencer template ───────────────────────────────
   const [{ data: client }, { data: positioning }, { data: template }] = await Promise.all([
     supabase.from('clients').select('name, role, industry, company').eq('id', clientId).single(),
     supabase.from('positioning').select('*').eq('client_id', clientId).maybeSingle(),
     templateId
-      ? supabase.from('influencer_templates').select('*').eq('id', templateId).maybeSingle()
+      ? supabase.from('influencer_profiles')
+          .select('name, content_template, style_adaptation_notes, uniqueness_guardrails')
+          .eq('id', templateId).eq('scan_status', 'completed').maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -122,8 +124,10 @@ FORMAT REQUIREMENTS (${spec.label}):
 Target: ${spec.wordCount}
 ${spec.instructions}
 
-${template ? `STRUCTURAL TEMPLATE (match this style and pacing, not the content):
-${(template as Record<string, unknown>).template_text ?? ''}` : ''}
+${template ? `INFLUENCER STYLE TEMPLATE (from "${(template as Record<string, unknown>).name}"):
+STRUCTURE/PACING TO MATCH: ${(template as Record<string, unknown>).content_template ?? ''}
+ADAPTATION NOTES: ${(template as Record<string, unknown>).style_adaptation_notes ?? ''}
+UNIQUENESS GUARDRAILS: ${((template as Record<string, unknown>).uniqueness_guardrails as string[] ?? []).join('; ')}` : ''}
 
 Write ONLY the content. No preamble. No "Here is your article:". No meta-commentary.`;
 
