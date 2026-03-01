@@ -1,7 +1,7 @@
 // app/layout.tsx
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
-import { Toaster } from '@/components/ui/toaster';
+import { Toaster } from "@/components/ui/sonner"
 import './globals.css';
 
 const inter = Inter({

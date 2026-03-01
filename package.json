@@ -26,6 +26,7 @@
     "@sentry/nextjs": "^10.40.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.39.0",
+    "@tailwindcss/postcss": "^4.2.1",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.2",
     "chart.js": "^4.4.1",
@@ -36,7 +37,8 @@
     "immer": "^11.1.4",
     "jspdf": "^2.5.1",
     "lucide-react": "^0.575.0",
-    "next": "^16.1.6",
+    "next": "^15.2.4",
+    "next-themes": "^0.4.6",
     "openai": "^6.24.0",
     "pptxgenjs": "^3.12.0",
     "react": "^19.0.0",
@@ -46,6 +48,7 @@
     "react-markdown": "^9.0.1",
     "recharts": "^3.7.0",
     "remark-gfm": "^4.0.0",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.3.0",
@@ -53,16 +56,15 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.2.1",
     "@types/node": "^20.10.6",
     "@types/react": "^18.2.46",
     "@types/react-dom": "^18.2.18",
-    "autoprefixer": "^10.4.16",
+    "autoprefixer": "^10.4.27",
     "eslint": "^8.56.0",
     "eslint-config-next": "14.1.0",
-    "postcss": "^8.4.33",
+    "postcss": "^8.5.6",
     "prettier": "^3.1.1",
     "prettier-plugin-tailwindcss": "^0.5.10",
-    "tailwindcss": "^3.4.1"
+    "tailwindcss": "^3.4.19"
   }
 }
