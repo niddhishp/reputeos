@@ -1,103 +1,403 @@
 /**
- * Feature Flags
- *
- * Centralised feature flag system. Flags are evaluated server-side per request.
- * To toggle a flag: change `enabled` here and redeploy, or read from env vars for runtime control.
+ * Feature Flag System
+ * 
+ * Centralized feature flag management for gradual rollouts,
+ * A/B testing, and plan-based feature access.
+ * 
+ * @example
+ * ```tsx
+ * // Check if feature is enabled
+ * if (isFeatureEnabled(FEATURES.AI_CONTENT_GENERATION, user)) {
+ *   return <AIContentGenerator />;
+ * }
+ * 
+ * // In a component
+ * export function Dashboard() {
+ *   const user = useCurrentUser();
+ *   const showAdvancedAnalytics = isFeatureEnabled(
+ *     FEATURES.BETA_ADVANCED_ANALYTICS,
+ *     user
+ *   );
+ *   
+ *   return (
+ *     <div>
+ *       {showAdvancedAnalytics && <AdvancedAnalytics />}
+ *     </div>
+ *   );
+ * }
+ * ```
  */
 
-export interface FeatureFlag {
+// ============================================================================
+// Feature Definitions
+// ============================================================================
+
+export const FEATURES = {
+  // Core Features (always enabled)
+  AI_CONTENT_GENERATION: 'ai-content-generation',
+  LSI_SCORING: 'lsi-scoring',
+  CRISIS_MONITORING: 'crisis-monitoring',
+  COMPETITOR_ANALYSIS: 'competitor-analysis',
+  DISCOVER_SCAN: 'discover-scan',
+  DIAGNOSE_REPORT: 'diagnose-report',
+  POSITION_ARCHETYPE: 'position-archetype',
+  EXPRESS_EDITOR: 'express-editor',
+  VALIDATE_EXPORT: 'validate-export',
+  SHIELD_ALERTS: 'shield-alerts',
+  
+  // Beta Features (gradual rollout)
+  BETA_TEAM_COLLABORATION: 'beta-team-collaboration',
+  BETA_ADVANCED_ANALYTICS: 'beta-advanced-analytics',
+  BETA_AI_ENHANCEMENTS: 'beta-ai-enhancements',
+  BETA_MOBILE_APP: 'beta-mobile-app',
+  
+  // Premium Features (plan-based)
+  PREMIUM_WHITE_LABEL: 'premium-white-label',
+  PREMIUM_API_ACCESS: 'premium-api-access',
+  PREMIUM_CUSTOM_INTEGRATIONS: 'premium-custom-integrations',
+  PREMIUM_DEDICATED_SUPPORT: 'premium-dedicated-support',
+  
+  // Enterprise Features
+  ENTERPRISE_SSO: 'enterprise-sso',
+  ENTERPRISE_AUDIT_LOGS: 'enterprise-audit-logs',
+  ENTERPRISE_SLA: 'enterprise-sla',
+  ENTERPRISE_CUSTOM_CONTRACT: 'enterprise-custom-contract',
+} as const;
+
+export type FeatureFlag = typeof FEATURES[keyof typeof FEATURES];
+
+// ============================================================================
+// Feature Configuration
+// ============================================================================
+
+export interface FeatureConfig {
+  /** Whether the feature is globally enabled */
   enabled: boolean;
-  description: string;
-  rolloutPercentage?: number; // 0-100
-  allowedRoles?: ('consultant' | 'client_view' | 'admin')[];
+  
+  /** Percentage of users to roll out to (0-100) */
+  rolloutPercentage?: number;
+  
+  /** Allowed user roles */
+  allowedRoles?: string[];
+  
+  /** Allowed subscription plans */
+  allowedPlans?: string[];
+  
+  /** Start date for the feature */
+  startDate?: Date;
+  
+  /** End date for the feature (for time-limited features) */
+  endDate?: Date;
+  
+  /** Description of the feature */
+  description?: string;
 }
 
-export const FEATURE_FLAGS: Record<string, FeatureFlag> = {
-  INFLUENCER_DNA_ANALYZER: {
+// ============================================================================
+// Feature Flag Configuration
+// ============================================================================
+
+export const FEATURE_FLAGS: Record<FeatureFlag, FeatureConfig> = {
+  // Core Features
+  [FEATURES.AI_CONTENT_GENERATION]: {
     enabled: true,
-    description: 'Influencer content DNA extraction and template generation',
-    allowedRoles: ['consultant'],
+    description: 'AI-powered content generation for thought leadership',
   },
-  ARCHETYPE_EVOLUTION: {
+  [FEATURES.LSI_SCORING]: {
     enabled: true,
-    description: 'A/B test and evolve archetypes over time',
-    allowedRoles: ['consultant'],
+    description: 'Leadership Sentiment Index scoring system',
   },
-  BOARD_REPORT_PPTX: {
+  [FEATURES.CRISIS_MONITORING]: {
     enabled: true,
-    description: 'Export validate results as PowerPoint board report',
+    description: '24/7 crisis monitoring and alerts',
   },
-  REALTIME_CRISIS_ALERTS: {
+  [FEATURES.COMPETITOR_ANALYSIS]: {
     enabled: true,
-    description: 'Real-time Supabase subscription for crisis alerts in Shield',
+    description: 'Competitor reputation analysis',
   },
-  AI_CONTENT_GENERATION: {
+  [FEATURES.DISCOVER_SCAN]: {
     enabled: true,
-    description: 'GPT-4 powered content generation in Express module',
+    description: 'Digital footprint discovery scan',
   },
-  NLP_COMPLIANCE_CHECKER: {
+  [FEATURES.DIAGNOSE_REPORT]: {
     enabled: true,
-    description: 'NLP authority marker and frame detection on generated content',
+    description: 'LSI diagnosis and reporting',
   },
-  PERFORMANCE_PREDICTION: {
+  [FEATURES.POSITION_ARCHETYPE]: {
     enabled: true,
-    description: 'Heuristic engagement rate prediction for content',
+    description: 'Archetype positioning strategy',
   },
-  COMPETITOR_TRACKING: {
+  [FEATURES.EXPRESS_EDITOR]: {
     enabled: true,
-    description: 'Track competitors in Shield module',
+    description: 'AI content editor with NLP validation',
   },
-  DISCOVER_SCAN: {
+  [FEATURES.VALIDATE_EXPORT]: {
     enabled: true,
-    description: 'Trigger automated discovery scan via n8n webhook',
+    description: 'Export validation reports (PDF/PPTX)',
   },
-  BETA_LSI_CALCULATOR: {
+  [FEATURES.SHIELD_ALERTS]: {
+    enabled: true,
+    description: 'Shield module real-time alerts',
+  },
+  
+  // Beta Features
+  [FEATURES.BETA_TEAM_COLLABORATION]: {
+    enabled: true,
+    rolloutPercentage: 10,
+    allowedRoles: ['consultant', 'admin'],
+    description: 'Team collaboration features for consultants',
+  },
+  [FEATURES.BETA_ADVANCED_ANALYTICS]: {
+    enabled: true,
+    rolloutPercentage: 25,
+    description: 'Advanced analytics dashboard',
+  },
+  [FEATURES.BETA_AI_ENHANCEMENTS]: {
+    enabled: true,
+    rolloutPercentage: 15,
+    description: 'Enhanced AI content generation',
+  },
+  [FEATURES.BETA_MOBILE_APP]: {
     enabled: false,
-    description: 'Self-serve LSI calculator on marketing page',
-    rolloutPercentage: 0,
+    description: 'Mobile app access (coming soon)',
   },
-  EXIT_INTENT_MODAL: {
-    enabled: false,
-    description: 'Exit intent modal on marketing pages',
-    rolloutPercentage: 0,
+  
+  // Premium Features
+  [FEATURES.PREMIUM_WHITE_LABEL]: {
+    enabled: true,
+    allowedPlans: ['enterprise'],
+    description: 'White-label reports and branding',
+  },
+  [FEATURES.PREMIUM_API_ACCESS]: {
+    enabled: true,
+    allowedPlans: ['pro', 'enterprise'],
+    description: 'API access for integrations',
+  },
+  [FEATURES.PREMIUM_CUSTOM_INTEGRATIONS]: {
+    enabled: true,
+    allowedPlans: ['enterprise'],
+    description: 'Custom third-party integrations',
+  },
+  [FEATURES.PREMIUM_DEDICATED_SUPPORT]: {
+    enabled: true,
+    allowedPlans: ['pro', 'enterprise'],
+    description: 'Dedicated customer support',
+  },
+  
+  // Enterprise Features
+  [FEATURES.ENTERPRISE_SSO]: {
+    enabled: true,
+    allowedPlans: ['enterprise'],
+    description: 'Single Sign-On (SSO) integration',
+  },
+  [FEATURES.ENTERPRISE_AUDIT_LOGS]: {
+    enabled: true,
+    allowedPlans: ['enterprise'],
+    description: 'Comprehensive audit logs',
+  },
+  [FEATURES.ENTERPRISE_SLA]: {
+    enabled: true,
+    allowedPlans: ['enterprise'],
+    description: 'Service Level Agreement guarantees',
+  },
+  [FEATURES.ENTERPRISE_CUSTOM_CONTRACT]: {
+    enabled: true,
+    allowedPlans: ['enterprise'],
+    description: 'Custom contract terms',
   },
 };
 
+// ============================================================================
+// User Context Interface
+// ============================================================================
+
+export interface FeatureUser {
+  id: string;
+  role?: string;
+  plan?: string;
+  email?: string;
+  createdAt?: Date;
+}
+
+// ============================================================================
+// Feature Check Function
+// ============================================================================
+
 /**
- * Check if a feature flag is enabled.
- * Optionally restrict by user role.
+ * Check if a feature is enabled for a user
+ * 
+ * @param feature - The feature flag to check
+ * @param user - The user context (optional for global checks)
+ * @returns boolean indicating if the feature is enabled
  */
 export function isFeatureEnabled(
-  flagName: string,
-  userRole?: 'consultant' | 'client_view' | 'admin'
+  feature: FeatureFlag,
+  user?: FeatureUser
 ): boolean {
-  const flag = FEATURE_FLAGS[flagName];
-  if (!flag) return false;
-  if (!flag.enabled) return false;
-
-  // Check role restriction
-  if (flag.allowedRoles && userRole) {
-    if (!flag.allowedRoles.includes(userRole)) return false;
+  const config = FEATURE_FLAGS[feature];
+  
+  // Feature not found or globally disabled
+  if (!config || !config.enabled) {
+    return false;
   }
-
-  // Check rollout percentage (deterministic per flag name for now)
-  if (flag.rolloutPercentage !== undefined && flag.rolloutPercentage < 100) {
-    // Simple hash: use flag name to get consistent pseudo-random value
-    const hash = flagName.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    const bucket = hash % 100;
-    if (bucket >= flag.rolloutPercentage) return false;
+  
+  // Check date constraints
+  const now = new Date();
+  if (config.startDate && now < config.startDate) {
+    return false;
   }
-
+  if (config.endDate && now > config.endDate) {
+    return false;
+  }
+  
+  // Check role restrictions
+  if (config.allowedRoles && config.allowedRoles.length > 0) {
+    if (!user?.role || !config.allowedRoles.includes(user.role)) {
+      return false;
+    }
+  }
+  
+  // Check plan restrictions
+  if (config.allowedPlans && config.allowedPlans.length > 0) {
+    if (!user?.plan || !config.allowedPlans.includes(user.plan)) {
+      return false;
+    }
+  }
+  
+  // Check rollout percentage
+  if (config.rolloutPercentage !== undefined && config.rolloutPercentage < 100) {
+    if (!user?.id) {
+      // No user ID, can't determine rollout - be conservative
+      return false;
+    }
+    
+    // Deterministic rollout based on user ID hash
+    const hash = hashString(user.id);
+    const userPercentage = Math.abs(hash) % 100;
+    
+    if (userPercentage >= config.rolloutPercentage) {
+      return false;
+    }
+  }
+  
   return true;
 }
 
 /**
- * Get all enabled flags for a given role.
+ * Check if a feature is globally enabled (ignoring user context)
  */
-export function getEnabledFlags(
-  userRole?: 'consultant' | 'client_view' | 'admin'
-): string[] {
-  return Object.keys(FEATURE_FLAGS).filter((key) =>
-    isFeatureEnabled(key, userRole)
+export function isFeatureGloballyEnabled(feature: FeatureFlag): boolean {
+  const config = FEATURE_FLAGS[feature];
+  return config?.enabled ?? false;
+}
+
+/**
+ * Get feature configuration
+ */
+export function getFeatureConfig(feature: FeatureFlag): FeatureConfig | undefined {
+  return FEATURE_FLAGS[feature];
+}
+
+/**
+ * Get all enabled features for a user
+ */
+export function getEnabledFeatures(user?: FeatureUser): FeatureFlag[] {
+  return (Object.keys(FEATURE_FLAGS) as FeatureFlag[]).filter(
+    (feature) => isFeatureEnabled(feature, user)
   );
+}
+
+/**
+ * Get all features by category
+ */
+export function getFeaturesByCategory(
+  category: 'core' | 'beta' | 'premium' | 'enterprise'
+): FeatureFlag[] {
+  const prefixes = {
+    core: [],
+    beta: ['BETA_'],
+    premium: ['PREMIUM_'],
+    enterprise: ['ENTERPRISE_'],
+  };
+  
+  const prefix = prefixes[category];
+  
+  return (Object.keys(FEATURE_FLAGS) as FeatureFlag[]).filter((feature) => {
+    if (category === 'core') {
+      return !feature.includes('BETA_') && 
+             !feature.includes('PREMIUM_') && 
+             !feature.includes('ENTERPRISE_');
+    }
+    return prefix.some((p) => feature.includes(p));
+  });
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Simple hash function for deterministic user-based rollouts
+ */
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash;
+}
+
+/**
+ * Enable a feature (for admin use)
+ */
+export function enableFeature(feature: FeatureFlag): void {
+  if (FEATURE_FLAGS[feature]) {
+    FEATURE_FLAGS[feature].enabled = true;
+  }
+}
+
+/**
+ * Disable a feature (for admin use)
+ */
+export function disableFeature(feature: FeatureFlag): void {
+  if (FEATURE_FLAGS[feature]) {
+    FEATURE_FLAGS[feature].enabled = false;
+  }
+}
+
+/**
+ * Update rollout percentage (for admin use)
+ */
+export function setRolloutPercentage(feature: FeatureFlag, percentage: number): void {
+  if (FEATURE_FLAGS[feature]) {
+    FEATURE_FLAGS[feature].rolloutPercentage = Math.max(0, Math.min(100, percentage));
+  }
+}
+
+// ============================================================================
+// React Hook (for client-side usage)
+// ============================================================================
+
+/**
+ * React hook for feature flags
+ * 
+ * @example
+ * ```tsx
+ * function MyComponent() {
+ *   const { isEnabled, config } = useFeature(FEATURES.BETA_TEAM_COLLABORATION);
+ *   
+ *   if (!isEnabled) return null;
+ *   
+ *   return <TeamCollaborationFeature />;
+ * }
+ * ```
+ */
+export function useFeature(feature: FeatureFlag, user?: FeatureUser) {
+  return {
+    isEnabled: isFeatureEnabled(feature, user),
+    config: getFeatureConfig(feature),
+    isGloballyEnabled: isFeatureGloballyEnabled(feature),
+  };
 }
