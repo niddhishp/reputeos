@@ -29,7 +29,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const { data: discoverRun } = await supabase
     .from('discover_runs')
-    .select('sentiment_summary, frame_distribution, top_keywords, total_mentions')
+    .select('sentiment_dist, frame_dist, top_keywords, total_mentions, archetype_hints, crisis_signals, analysis_summary')
     .eq('client_id', clientId)
     .eq('status', 'completed')
     .order('created_at', { ascending: false })
@@ -76,8 +76,12 @@ async function assignArchetypes({ client, discoverRun, lsiRun }: {
   discoverRun: Record<string, unknown> | null;
   lsiRun: Record<string, unknown> | null;
 }) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const frames = (discoverRun?.frame_distribution as Record<string, number>) || {};
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  const frames = (discoverRun?.frame_dist as Record<string, number>) || {};
+  const archetypeHints = (discoverRun?.archetype_hints as string[]) || [];
+  const crisisSignals = (discoverRun?.crisis_signals as string[]) || [];
+  const discoverySummary = (discoverRun?.analysis_summary as string) || '';
   const lsiTotal = (lsiRun?.total_score as number) || 40;
   const gaps = (lsiRun?.gaps as Array<{component: string; gap: number}>) || [];
 
@@ -86,52 +90,96 @@ async function assignArchetypes({ client, discoverRun, lsiRun }: {
     role: client.role,
     company: client.company,
     industry: client.industry,
+    bio: client.bio || '',
+    keywords: client.keywords || [],
     lsiScore: lsiTotal,
+    lsiComponents: lsiRun?.components || {},
     dominantFrame: Object.entries(frames).sort((a, b) => b[1] - a[1])[0]?.[0] || 'other',
+    secondaryFrame: Object.entries(frames).sort((a, b) => b[1] - a[1])[1]?.[0] || 'other',
+    frameDistribution: frames,
     topGaps: gaps.slice(0, 3).map(g => g.component),
     topKeywords: (discoverRun?.top_keywords as string[]) || [],
+    archetypeHints,
+    crisisSignals,
+    discoverySummary,
+    sentimentDist: discoverRun?.sentiment_dist || { positive: 50, neutral: 30, negative: 20 },
+    totalMentions: discoverRun?.total_mentions || 0,
   };
 
-  if (!apiKey) {
+  if (!openaiKey && !openrouterKey) {
     return generateFallbackArchetypes(clientProfile);
   }
 
-  const systemPrompt = `You are a strategic reputation consultant and expert in Jungian archetypes for personal branding.
+  const systemPrompt = `You are a strategic reputation consultant and NLP expert specialising in Jungian archetypes for executive personal branding in India and emerging markets.
 
-Given a professional's profile and reputation data, assign:
-1. A CHARACTER archetype (Jungian): Choose from: Sage, Hero, Explorer, Rebel, Magician, Caregiver, Creator, Ruler, Jester, Lover, Everyman, Innocent
-2. A BUSINESS archetype: Choose from: Visionary Disruptor, Expert Authority, Humble Servant Leader, Strategic Operator, Inspiring Coach, Social Entrepreneur, Legacy Builder, Category Creator, Turnaround Specialist, Ethical Capitalist, Community Catalyst, Patient Investor, Crisis Navigator, Bridge Builder
+You receive a professional's full digital footprint data from 62 sources: LSI scores, linguistic frame distribution, sentiment patterns, top keywords, AI-generated archetype hints, and crisis signals.
 
-Return ONLY this JSON structure:
+CHARACTER ARCHETYPES (Jungian 12): Sage, Hero, Explorer, Rebel, Magician, Caregiver, Creator, Ruler, Jester, Lover, Everyman, Innocent
+BUSINESS ARCHETYPES (14): Visionary Disruptor, Expert Authority, Humble Servant Leader, Strategic Operator, Inspiring Coach, Social Entrepreneur, Legacy Builder, Category Creator, Turnaround Specialist, Ethical Capitalist, Community Catalyst, Patient Investor, Crisis Navigator, Bridge Builder
+
+SCORING:
+- Behavioral fit: Does frame distribution match archetype traits?
+- Authenticity: Does their background/keywords support this archetype?
+- Market opportunity: Is this archetype underserved in their industry/region?
+- Crisis mitigation: Does choice address their LSI gaps?
+- Followability: Historical engagement for this archetype type
+
+If crisis_signals exist, factor archetype choice around reputation recovery, not just growth.
+
+Return ONLY valid JSON:
 {
-  "personalArchetype": {"id": "sage", "name": "The Sage", "description": "...", "traits": ["..."], "voice": "..."},
-  "businessArchetype": {"id": "expert-authority", "name": "Expert Authority", "description": "...", "pillars": ["..."]},
-  "confidence": 85,
-  "followabilityScore": 72,
+  "personalArchetype": {"id": "sage", "name": "The Sage", "description": "2-3 sentences why this fits their specific data", "traits": ["Trait1","Trait2","Trait3","Trait4"], "voice": "Precise voice description: tone, sentence structure, authority style"},
+  "businessArchetype": {"id": "expert-authority", "name": "Expert Authority", "description": "2-3 sentences why", "pillars": ["Pillar1","Pillar2","Pillar3"]},
+  "alternatePersonal": {"id": "ruler", "name": "The Ruler", "reason": "Why second choice"},
+  "confidence": 82,
+  "followabilityScore": 74,
   "followabilityFactors": {"uniqueness": 70, "emotionalResonance": 75, "contentOpportunity": 80, "platformFit": 68, "historicalPerformance": 65},
-  "positioningStatement": "One sentence positioning statement",
-  "contentPillars": [{"name": "...", "themes": ["...", "..."], "frequency": "2x/week", "formats": ["LinkedIn article", "Thread"]}],
-  "signatureLines": ["...", "...", "..."]
+  "positioningStatement": "One precise sentence capturing unique value in their market",
+  "contentPillars": [
+    {"name": "Name", "themes": ["t1","t2","t3"], "frequency": "2x/week", "formats": ["LinkedIn article","Short post"]},
+    {"name": "Name", "themes": ["t1","t2","t3"], "frequency": "1x/week", "formats": ["Thread","Op-ed"]},
+    {"name": "Name", "themes": ["t1","t2","t3"], "frequency": "1x/week", "formats": ["Story post","Podcast"]},
+    {"name": "Name", "themes": ["t1","t2","t3"], "frequency": "2x/month", "formats": ["Whitepaper","LinkedIn article"]},
+    {"name": "Name", "themes": ["t1","t2","t3"], "frequency": "2x/month", "formats": ["Thread","Panel talk"]}
+  ],
+  "signatureLines": ["Identity statement","Value proposition","Differentiation","Mission","Legacy statement"],
+  "rootCauseInsights": ["Gap 1 and cause","Gap 2 and cause","Gap 3 and cause"],
+  "strategicInsights": ["Recommendation 1","Recommendation 2","Recommendation 3"]
 }`;
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const endpoint = openrouterKey && !openaiKey
+    ? 'https://openrouter.ai/api/v1/chat/completions'
+    : 'https://api.openai.com/v1/chat/completions';
+  const authKey = openrouterKey && !openaiKey ? openrouterKey : openaiKey;
+  const model = openrouterKey && !openaiKey ? 'openai/gpt-4o' : 'gpt-4o';
+
+  const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    headers: {
+      'Authorization': `Bearer ${authKey}`,
+      'Content-Type': 'application/json',
+      ...((openrouterKey && !openaiKey) ? { 'HTTP-Referer': 'https://reputeos.com', 'X-Title': 'ReputeOS' } : {}),
+    },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Assign archetypes for this professional:\n${JSON.stringify(clientProfile, null, 2)}` }
+        { role: 'user', content: `Assign archetypes and positioning for:\n${JSON.stringify(clientProfile, null, 2)}` },
       ],
       temperature: 0.4,
-      max_tokens: 1200,
+      max_tokens: 1800,
     }),
+    signal: AbortSignal.timeout(45000),
   });
 
-  if (!res.ok) throw new Error(`OpenAI error: ${res.status}`);
+  if (!res.ok) throw new Error(`AI API error: ${res.status} ${await res.text().then(t => t.slice(0,200))}`);
   const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
-  return JSON.parse(content.replace(/```json|```/g, '').trim());
+  const raw = data.choices?.[0]?.message?.content || '{}';
+  try {
+    return JSON.parse(raw.replace(/```json|```/g, '').trim());
+  } catch {
+    throw new Error('AI returned invalid JSON for archetype assignment');
+  }
 }
 
 function generateFallbackArchetypes(profile: Record<string, unknown>) {
