@@ -14,6 +14,7 @@ import {
   Shield,
   ArrowRight,
   Calendar,
+  Pencil,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -134,9 +135,17 @@ export default async function ClientOverviewPage({
             )}
           </div>
         </div>
-        <Badge variant={client.status === 'active' ? 'default' : 'secondary'}>
-          {client.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Link href={`/dashboard/clients/${client.id}/edit`}>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Pencil className="h-3.5 w-3.5" />
+              Edit Profile
+            </Button>
+          </Link>
+          <Badge variant={client.status === 'active' ? 'default' : 'secondary'}>
+            {client.status}
+          </Badge>
+        </div>
       </div>
 
       {/* Stats Row */}

@@ -23,7 +23,7 @@ async function fetchTwitterX(client: ClientProfile): Promise<SourceResult[]> {
 
     const res = await fetch(url.toString(), {
       headers: { 'Authorization': `Bearer ${X_BEARER_TOKEN}` },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(8000), // 8s hard limit
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -106,14 +106,14 @@ async function fetchApifyActor(
 ): Promise<SourceResult[]> {
   if (!APIFY_TOKEN) return [];
   try {
-    // Start actor run
+    // Hard 30s timeout - Apify can be slow, never block the whole scan
     const startRes = await fetch(
-      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&memory=256&timeout=60`,
+      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&memory=256&timeout=25`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
-        signal: AbortSignal.timeout(65000),
+        signal: AbortSignal.timeout(30000), // 30s max, then skip
       }
     );
     if (!startRes.ok) return [];
