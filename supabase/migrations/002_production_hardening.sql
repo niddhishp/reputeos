@@ -73,9 +73,19 @@ DO $$ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- RLS: user_profiles (may be missing)
+-- user_profiles table (missing from 001 entirely — create it)
 -- ---------------------------------------------------------------------------
-ALTER TABLE IF EXISTS user_profiles ENABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS user_profiles (
+  id         UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
+  role       TEXT DEFAULT 'consultant' CHECK (role IN ('consultant', 'client_view', 'admin')),
+  plan       TEXT DEFAULT 'solo'       CHECK (plan IN ('solo', 'agency', 'enterprise')),
+  name       TEXT,
+  company    TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='user_profiles' AND policyname='Users can view own profile') THEN
