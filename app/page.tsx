@@ -1,8 +1,15 @@
 // app/page.tsx
-// Root redirect is handled by middleware.ts
-// This page should never be seen — middleware redirects / → /clients or /login
+// Root route — show marketing page to visitors, redirect logged-in users to app
 import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
 
-export default function RootPage() {
-  redirect('/clients');
+export default async function RootPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Logged in → go straight to the app
+  if (user) redirect('/dashboard/clients');
+
+  // Not logged in → show marketing homepage
+  redirect('/home');
 }
