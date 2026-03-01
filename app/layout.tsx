@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Inter, Instrument_Serif, Space_Grotesk } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { SkipLink } from '@/components/accessibility/skip-link';
 import { OrganizationSchema, SoftwareApplicationSchema } from '@/components/seo/structured-data';
