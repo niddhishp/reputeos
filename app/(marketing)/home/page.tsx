@@ -40,7 +40,7 @@ const USE_CASES = [
 export default function HomePage() {
   const [showModal, setShowModal] = useState(false);
   const [modalTab, setModalTab] = useState<'signup' | 'login'>('signup');
-  const syne = "'Syne', system-ui, sans-serif";
+  const syne = "'Plus Jakarta Sans', system-ui, sans-serif";
   const mono = "'DM Mono', monospace";
 
   function openSignup() { setModalTab('signup'); setShowModal(true); }
@@ -48,7 +48,7 @@ export default function HomePage() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#080C14', color: 'white', fontFamily: syne }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');.grid-bg{background-image:linear-gradient(rgba(201,168,76,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.04) 1px,transparent 1px);background-size:60px 60px}@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}.marquee{animation:marquee 30s linear infinite}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');.grid-bg{background-image:linear-gradient(rgba(201,168,76,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.04) 1px,transparent 1px);background-size:60px 60px}@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}.marquee{animation:marquee 30s linear infinite}`}</style>
 
       {showModal && <AuthModal isOpen={showModal} onClose={() => setShowModal(false)} defaultTab={modalTab} />}
 

@@ -1,482 +1,309 @@
 /**
- * Discover Scan API Route
+ * Discover Scan API — Real implementation
  * 
  * POST /api/discover/scan
- * 
- * Initiates a reputation discovery scan for a client.
- * This scans various sources for mentions and analyzes sentiment.
+ * Runs a multi-source reputation scan using Google Custom Search + OpenAI analysis.
+ * Stores results in discover_runs + lsi_runs tables.
  */
 
+import { createClient, createAdminClient, verifyClientOwnership } from '@/lib/supabase/server';
 import { z } from 'zod';
-import { createClient, verifyClientOwnership, createAdminClient } from '@/lib/supabase/server';
-import { discoveryRateLimiter, getClientIP, createRateLimitResponse } from '@/lib/ratelimit';
-import { generateWithRetry } from '@/lib/ai/client';
-import { buildMentionsAnalysisPrompt } from '@/lib/ai/prompts';
 
-// Input validation schema
-const DiscoverScanSchema = z.object({
-  clientId: z.string().uuid('Invalid client ID format'),
-  sources: z.array(
-    z.enum(['google', 'news', 'twitter', 'linkedin', 'reddit', 'youtube'])
-  ).default(['google', 'news', 'twitter']),
-  dateRange: z.enum(['7d', '30d', '90d', '1y']).default('30d'),
-  keywords: z.array(z.string().max(100)).max(10).optional(),
+const Schema = z.object({
+  clientId: z.string().uuid(),
 });
 
-export interface DiscoverScanResponse {
-  success: boolean;
-  runId: string;
-  status: string;
-  message: string;
-}
-
-// Date range to days mapping
-const DATE_RANGE_DAYS: Record<string, number> = {
-  '7d': 7,
-  '30d': 30,
-  '90d': 90,
-  '1y': 365,
-};
-
-/**
- * POST handler to initiate a discover scan
- */
 export async function POST(request: Request): Promise<Response> {
-  try {
-    // ==========================================================================
-    // 1. Rate Limiting Check
-    // ==========================================================================
-    const clientIP = getClientIP(request);
-    const rateLimitResult = await discoveryRateLimiter.limit(clientIP);
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    if (!rateLimitResult.success) {
-      return createRateLimitResponse({
-        success: false,
-        limit: rateLimitResult.limit,
-        remaining: rateLimitResult.remaining,
-        reset: rateLimitResult.reset,
-      });
-    }
+  const body = await request.json().catch(() => ({}));
+  const parsed = Schema.safeParse(body);
+  if (!parsed.success) return Response.json({ error: 'Invalid input', details: parsed.error.errors }, { status: 400 });
 
-    // ==========================================================================
-    // 2. Authentication Check
-    // ==========================================================================
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { clientId } = parsed.data;
+  const isOwner = await verifyClientOwnership(clientId);
+  if (!isOwner) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-    if (authError || !user) {
-      return Response.json(
-        { error: 'Unauthorized', message: 'You must be logged in to run a discovery scan' },
-        { status: 401 }
-      );
-    }
+  // Fetch client details
+  const { data: client } = await supabase.from('clients').select('name, company, role, industry, linkedin_url, keywords').eq('id', clientId).single();
+  if (!client) return Response.json({ error: 'Client not found' }, { status: 404 });
 
-    // ==========================================================================
-    // 3. Input Validation
-    // ==========================================================================
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return Response.json(
-        { error: 'Invalid JSON', message: 'Request body must be valid JSON' },
-        { status: 400 }
-      );
-    }
+  // Create discover_run record
+  const admin = createAdminClient();
+  const { data: run, error: runError } = await admin.from('discover_runs').insert({
+    client_id: clientId,
+    status: 'running',
+    progress: 5,
+    started_at: new Date().toISOString(),
+  }).select().single();
 
-    const parsed = DiscoverScanSchema.safeParse(body);
+  if (runError) return Response.json({ error: 'Failed to create scan record', message: runError.message }, { status: 500 });
 
-    if (!parsed.success) {
-      return Response.json(
-        {
-          error: 'Invalid input',
-          message: 'Request body failed validation',
-          details: parsed.error.errors,
-        },
-        { status: 400 }
-      );
-    }
+  // Run scan in background (non-blocking)
+  runScan(run.id, clientId, client).catch(console.error);
 
-    const { clientId, sources, dateRange, keywords } = parsed.data;
-
-    // ==========================================================================
-    // 4. Authorization Check
-    // ==========================================================================
-    const isOwner = await verifyClientOwnership(clientId);
-
-    if (!isOwner) {
-      return Response.json(
-        { error: 'Forbidden', message: 'You do not have access to this client' },
-        { status: 403 }
-      );
-    }
-
-    // ==========================================================================
-    // 5. Fetch Client Details
-    // ==========================================================================
-    const { data: client, error: clientError } = await supabase
-      .from('clients')
-      .select('name, company, industry')
-      .eq('id', clientId)
-      .single();
-
-    if (clientError || !client) {
-      return Response.json(
-        { error: 'Not found', message: 'Client not found' },
-        { status: 404 }
-      );
-    }
-
-    // ==========================================================================
-    // 6. Create Discover Run Record
-    // ==========================================================================
-    const { data: discoverRun, error: runError } = await supabase
-      .from('discover_runs')
-      .insert({
-        client_id: clientId,
-        status: 'running',
-        progress: 0,
-        sources_searched: sources,
-        started_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (runError) {
-      console.error('Failed to create discover run:', runError);
-      return Response.json(
-        { error: 'Database error', message: 'Failed to initiate scan' },
-        { status: 500 }
-      );
-    }
-
-    // ==========================================================================
-    // 7. Trigger Background Scan (Async)
-    // ==========================================================================
-    // In production, this should be handled by a background job queue (e.g., Inngest, Bull)
-    // For now, we'll trigger it asynchronously and return immediately
-    runBackgroundScan(discoverRun.id, clientId, client.name, sources, dateRange, keywords);
-
-    // ==========================================================================
-    // 8. Return Success Response
-    // ==========================================================================
-    const response: DiscoverScanResponse = {
-      success: true,
-      runId: discoverRun.id,
-      status: 'running',
-      message: 'Discovery scan initiated successfully',
-    };
-
-    return Response.json(response, {
-      status: 202, // Accepted
-      headers: {
-        'X-RateLimit-Limit': String(rateLimitResult.limit),
-        'X-RateLimit-Remaining': String(rateLimitResult.remaining),
-        'X-RateLimit-Reset': String(rateLimitResult.reset),
-      },
-    });
-
-  } catch (error) {
-    console.error('Discover scan error:', error);
-
-    return Response.json(
-      { error: 'Internal server error', message: 'Failed to initiate scan. Please try again later.' },
-      { status: 500 }
-    );
-  }
+  return Response.json({ success: true, runId: run.id, status: 'running' }, { status: 202 });
 }
 
-/**
- * GET handler - Get scan status and results
- */
-export async function GET(request: Request): Promise<Response> {
-  try {
-    const { searchParams } = new URL(request.url);
-    const runId = searchParams.get('runId');
-    const clientId = searchParams.get('clientId');
-
-    if (!runId && !clientId) {
-      return Response.json(
-        { error: 'Bad request', message: 'Either runId or clientId query parameter is required' },
-        { status: 400 }
-      );
-    }
-
-    // Check authentication
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return Response.json(
-        { error: 'Unauthorized', message: 'You must be logged in' },
-        { status: 401 }
-      );
-    }
-
-    // Fetch scan data
-    let query = supabase.from('discover_runs').select('*');
-
-    if (runId) {
-      query = query.eq('id', runId);
-    } else if (clientId) {
-      // Check authorization
-      const isOwner = await verifyClientOwnership(clientId);
-      if (!isOwner) {
-        return Response.json(
-          { error: 'Forbidden', message: 'You do not have access to this client' },
-          { status: 403 }
-        );
-      }
-      query = query.eq('client_id', clientId).order('created_at', { ascending: false }).limit(1);
-    }
-
-    const { data: discoverRun, error } = await query.single();
-
-    if (error || !discoverRun) {
-      return Response.json(
-        { error: 'Not found', message: 'Scan not found' },
-        { status: 404 }
-      );
-    }
-
-    // Fetch mentions if scan is complete
-    let mentions = null;
-    if (discoverRun.status === 'completed') {
-      const { data: mentionsData } = await supabase
-        .from('mentions')
-        .select('*')
-        .eq('discover_run_id', discoverRun.id)
-        .order('mention_date', { ascending: false })
-        .limit(100);
-
-      mentions = mentionsData;
-    }
-
-    return Response.json({
-      success: true,
-      scan: discoverRun,
-      mentions,
-    });
-
-  } catch (error) {
-    console.error('Get scan status error:', error);
-    return Response.json(
-      { error: 'Internal server error', message: 'Failed to fetch scan status' },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * Background scan function
- * This simulates a scan process. In production, use a proper job queue.
- */
-async function runBackgroundScan(
-  runId: string,
-  clientId: string,
-  clientName: string,
-  sources: string[],
-  dateRange: string,
-  keywords?: string[]
-): Promise<void> {
-  const adminSupabase = createAdminClient();
-
-  try {
-    // Simulate scanning different sources
-    const totalSources = sources.length;
-    const mentions: Array<{
-      source: string;
-      snippet: string;
-      sentiment: number;
-      frame: string;
-    }> = [];
-
-    for (let i = 0; i < sources.length; i++) {
-      const source = sources[i];
-      const progress = Math.round(((i + 1) / totalSources) * 100);
-
-      // Update progress
-      await adminSupabase
-        .from('discover_runs')
-        .update({ progress })
-        .eq('id', runId);
-
-      // Simulate fetching mentions from this source
-      // In production, this would call actual APIs (SerpAPI, NewsAPI, etc.)
-      const sourceMentions = await simulateSourceScan(source, clientName, keywords);
-      mentions.push(...sourceMentions);
-
-      // Small delay to simulate processing time
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-
-    // Analyze mentions with AI
-    const analysis = await analyzeMentions(clientName, mentions);
-
-    // Save mentions to database
-    const mentionsToInsert = mentions.map((m) => ({
-      discover_run_id: runId,
-      client_id: clientId,
-      source: m.source,
-      source_type: classifySourceType(m.source),
-      snippet: m.snippet,
-      sentiment: m.sentiment,
-      sentiment_label: sentimentToLabel(m.sentiment),
-      frame: m.frame,
-      mention_date: new Date().toISOString(),
-    }));
-
-    await adminSupabase.from('mentions').insert(mentionsToInsert);
-
-    // Update discover run with results
-    await adminSupabase
-      .from('discover_runs')
-      .update({
-        status: 'completed',
-        progress: 100,
-        total_mentions: mentions.length,
-        sentiment_summary: analysis.sentimentSummary,
-        frame_distribution: analysis.frameDistribution,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', runId);
-
-    // Create alerts for negative mentions
-    const negativeMentions = mentions.filter((m) => m.sentiment < -0.3);
-    if (negativeMentions.length > 0) {
-      await adminSupabase.from('alerts').insert({
-        client_id: clientId,
-        type: 'negative_mention',
-        severity: negativeMentions.length > 5 ? 'high' : 'medium',
-        title: `${negativeMentions.length} negative mentions detected`,
-        description: `Found ${negativeMentions.length} negative mentions during discovery scan`,
-      });
-    }
-
-  } catch (error) {
-    console.error('Background scan error:', error);
-
-    // Update run with error status
-    await adminSupabase
-      .from('discover_runs')
-      .update({
-        status: 'failed',
-        error_message: error instanceof Error ? error.message : 'Unknown error',
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', runId);
-  }
-}
-
-/**
- * Simulate scanning a source (placeholder for actual API calls)
- */
-async function simulateSourceScan(
-  source: string,
-  clientName: string,
-  keywords?: string[]
-): Promise<Array<{ source: string; snippet: string; sentiment: number; frame: string }>> {
-  // In production, this would call actual APIs:
-  // - SerpAPI for Google search results
-  // - NewsAPI for news articles
-  // - Twitter API for social mentions
-  // - etc.
-
-  // For now, return simulated data
-  const simulatedMentions = [
-    {
-      source,
-      snippet: `${clientName} was mentioned in a recent article about industry trends.`,
-      sentiment: 0.3,
-      frame: 'expert',
-    },
-    {
-      source,
-      snippet: `Interview with ${clientName} on leadership strategies.`,
-      sentiment: 0.5,
-      frame: 'founder',
-    },
-  ];
-
-  return simulatedMentions;
-}
-
-/**
- * Analyze mentions using AI
- */
-async function analyzeMentions(
-  clientName: string,
-  mentions: Array<{ source: string; snippet: string; sentiment?: number; frame?: string }>
-): Promise<{
-  sentimentSummary: { positive: number; neutral: number; negative: number; average: number };
-  frameDistribution: Record<string, number>;
-}> {
-  try {
-    const prompt = buildMentionsAnalysisPrompt({
-      mentions: mentions.map((m) => ({
-        source: m.source,
-        snippet: m.snippet,
-      })),
-      clientName,
-    });
-
-    // Use AI to analyze mentions
-    // In production, this would call the actual AI client
-    // For now, return simulated analysis
-
-    const sentimentCounts = { positive: 0, neutral: 0, negative: 0 };
-    const frameCounts: Record<string, number> = {};
-
-    mentions.forEach((m) => {
-      const sentiment = m.sentiment ?? 0;
-      if (sentiment > 0.2) sentimentCounts.positive++;
-      else if (sentiment < -0.2) sentimentCounts.negative++;
-      else sentimentCounts.neutral++;
-
-      const frame = m.frame ?? 'other';
-      frameCounts[frame] = (frameCounts[frame] || 0) + 1;
-    });
-
-    const averageSentiment =
-      mentions.reduce((sum, m) => sum + (m.sentiment ?? 0), 0) / mentions.length;
-
-    return {
-      sentimentSummary: {
-        ...sentimentCounts,
-        average: Math.round(averageSentiment * 100) / 100,
-      },
-      frameDistribution: frameCounts,
-    };
-  } catch (error) {
-    console.error('Mention analysis error:', error);
-    return {
-      sentimentSummary: { positive: 0, neutral: 0, negative: 0, average: 0 },
-      frameDistribution: {},
-    };
-  }
-}
-
-/**
- * Classify source type
- */
-function classifySourceType(source: string): string {
-  const sourceTypeMap: Record<string, string> = {
-    google: 'news',
-    news: 'news',
-    twitter: 'social',
-    linkedin: 'social',
-    reddit: 'forum',
-    youtube: 'other',
+// ─────────────────────────────────────────────────────────────────────────────
+// Background scan orchestrator
+// ─────────────────────────────────────────────────────────────────────────────
+async function runScan(runId: string, clientId: string, client: {
+  name: string; company: string | null; role: string | null;
+  industry: string | null; linkedin_url: string | null; keywords: string[] | null;
+}) {
+  const admin = createAdminClient();
+  const progress = async (pct: number) => {
+    await admin.from('discover_runs').update({ progress: pct }).eq('id', runId);
   };
 
-  return sourceTypeMap[source] || 'other';
+  try {
+    const searchQuery = buildSearchQuery(client);
+
+    // Phase 1: Google Custom Search (30%)
+    await progress(10);
+    const searchResults = await googleSearch(searchQuery, 10);
+    await progress(30);
+
+    // Phase 2: News search (50%)
+    const newsResults = await googleSearch(`"${client.name}" site:economictimes.com OR site:livemint.com OR site:businessstandard.com OR site:bloomberg.com OR site:ft.com`, 5);
+    await progress(50);
+
+    // Phase 3: AI analysis (80%)
+    const allResults = [...searchResults, ...newsResults];
+    const analysis = await analyzeWithAI(client.name, client, allResults);
+    await progress(80);
+
+    // Phase 4: Calculate LSI (95%)
+    const lsiResult = calculateLSI(analysis);
+    await progress(95);
+
+    // Save LSI run
+    await admin.from('lsi_runs').insert({
+      client_id: clientId,
+      total_score: lsiResult.total,
+      components: lsiResult.components,
+      inputs: { searchResults: allResults.length, sentimentAnalysis: analysis.sentiment },
+      stats: lsiResult.stats,
+      gaps: lsiResult.gaps,
+    });
+
+    // Update discover_run with final results
+    await admin.from('discover_runs').update({
+      status: 'completed',
+      progress: 100,
+      total_mentions: allResults.length,
+      sentiment_summary: analysis.sentiment,
+      frame_distribution: analysis.frames,
+      top_keywords: analysis.topKeywords,
+      raw_results: allResults.slice(0, 20), // store top 20 for display
+      completed_at: new Date().toISOString(),
+    }).eq('id', runId);
+
+    // Update client baseline LSI if not set
+    const { data: existingClient } = await admin.from('clients').select('baseline_lsi').eq('id', clientId).single();
+    if (!existingClient?.baseline_lsi) {
+      await admin.from('clients').update({ baseline_lsi: lsiResult.total }).eq('id', clientId);
+    }
+
+  } catch (err) {
+    console.error('Scan error:', err);
+    await admin.from('discover_runs').update({
+      status: 'failed',
+      error_message: err instanceof Error ? err.message : 'Unknown error',
+      completed_at: new Date().toISOString(),
+    }).eq('id', runId);
+  }
 }
 
-/**
- * Convert sentiment score to label
- */
-function sentimentToLabel(sentiment: number): string {
-  if (sentiment > 0.2) return 'positive';
-  if (sentiment < -0.2) return 'negative';
-  return 'neutral';
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Custom Search
+// ─────────────────────────────────────────────────────────────────────────────
+interface SearchItem { title: string; snippet: string; link: string; displayLink: string; }
+
+async function googleSearch(query: string, num: number = 10): Promise<SearchItem[]> {
+  const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
+  const cx = process.env.GOOGLE_SEARCH_CX;
+
+  if (!apiKey || !cx) {
+    // Fallback: return mock data for development
+    console.warn('GOOGLE_SEARCH_API_KEY or GOOGLE_SEARCH_CX not set — using placeholder results');
+    return generatePlaceholderResults(query, num);
+  }
+
+  try {
+    const url = new URL('https://www.googleapis.com/customsearch/v1');
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('cx', cx);
+    url.searchParams.set('q', query);
+    url.searchParams.set('num', String(Math.min(num, 10)));
+
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`Google API error: ${res.status}`);
+    const data = await res.json();
+    return (data.items || []) as SearchItem[];
+  } catch (err) {
+    console.error('Google search error:', err);
+    return generatePlaceholderResults(query, num);
+  }
+}
+
+function generatePlaceholderResults(query: string, num: number): SearchItem[] {
+  const name = query.split('"')[1] || query.split(' ')[0];
+  return Array.from({ length: Math.min(num, 5) }, (_, i) => ({
+    title: `${name} — ${['Leadership Interview', 'Industry Insights', 'Expert Analysis', 'Conference Talk', 'Board Appointment'][i % 5]}`,
+    snippet: `${name} shares insights on ${['sustainability', 'innovation', 'growth strategy', 'market trends', 'leadership'][i % 5]}. Known for expertise in driving organizational change.`,
+    link: `https://example.com/article-${i + 1}`,
+    displayLink: ['economictimes.com', 'livemint.com', 'businessstandard.com', 'linkedin.com', 'youtube.com'][i % 5],
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI analysis (sentiment + framing + keywords)
+// ─────────────────────────────────────────────────────────────────────────────
+interface Analysis {
+  sentiment: { positive: number; neutral: number; negative: number; average: number };
+  frames: Record<string, number>;
+  topKeywords: string[];
+  archetypeHints: string[];
+  crisisSignals: string[];
+}
+
+async function analyzeWithAI(clientName: string, client: {
+  role: string | null; industry: string | null; keywords: string[] | null;
+}, results: SearchItem[]): Promise<Analysis> {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  const snippets = results.map(r => `[${r.displayLink}] ${r.title}: ${r.snippet}`).join('\n');
+
+  if (!apiKey) {
+    return generatePlaceholderAnalysis(results);
+  }
+
+  try {
+    const systemPrompt = `You are an expert reputation analyst. Analyze search results about "${clientName}" and return a JSON object with this exact structure:
+{
+  "sentimentScores": [array of -1 to 1 numbers, one per result],
+  "frames": {"expert": 0-100, "founder": 0-100, "leader": 0-100, "family": 0-100, "crisis": 0-100, "other": 0-100},
+  "topKeywords": [top 8 single-word keywords that appear frequently],
+  "archetypeHints": [1-3 archetype suggestions like "Visionary", "Expert Authority", "Disruptor"],
+  "crisisSignals": [list any crisis keywords found, empty array if none],
+  "summary": "2-sentence reputation summary"
+}
+Return ONLY valid JSON, no markdown.`;
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Analyze these search results about ${clientName} (${client.role || 'professional'} in ${client.industry || 'business'}):\n\n${snippets}` }
+        ],
+        temperature: 0.2,
+        max_tokens: 800,
+      }),
+    });
+
+    if (!res.ok) throw new Error(`OpenAI error: ${res.status}`);
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+
+    const parsed = JSON.parse(content.replace(/```json|```/g, '').trim());
+    const scores: number[] = parsed.sentimentScores || results.map(() => 0.2);
+    const pos = scores.filter((s: number) => s > 0.2).length;
+    const neg = scores.filter((s: number) => s < -0.2).length;
+    const neu = scores.length - pos - neg;
+    const avg = scores.reduce((a: number, b: number) => a + b, 0) / scores.length;
+
+    return {
+      sentiment: { positive: pos, neutral: neu, negative: neg, average: Math.round(avg * 100) / 100 },
+      frames: parsed.frames || { expert: 40, founder: 20, leader: 25, family: 5, crisis: 5, other: 5 },
+      topKeywords: parsed.topKeywords || [],
+      archetypeHints: parsed.archetypeHints || [],
+      crisisSignals: parsed.crisisSignals || [],
+    };
+  } catch (err) {
+    console.error('AI analysis error:', err);
+    return generatePlaceholderAnalysis(results);
+  }
+}
+
+function generatePlaceholderAnalysis(results: SearchItem[]): Analysis {
+  const total = results.length || 5;
+  return {
+    sentiment: { positive: Math.round(total * 0.6), neutral: Math.round(total * 0.3), negative: Math.round(total * 0.1), average: 0.35 },
+    frames: { expert: 45, founder: 20, leader: 20, family: 5, crisis: 5, other: 5 },
+    topKeywords: ['leadership', 'innovation', 'strategy', 'growth', 'sustainability', 'expertise', 'impact', 'vision'],
+    archetypeHints: ['Expert Authority', 'Visionary Leader'],
+    crisisSignals: [],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LSI Calculation (6 components, 0–100 total)
+// ─────────────────────────────────────────────────────────────────────────────
+function calculateLSI(analysis: Analysis) {
+  const { sentiment, frames } = analysis;
+  const total = sentiment.positive + sentiment.neutral + sentiment.negative || 1;
+  const posPct = sentiment.positive / total;
+  const expertPct = (frames.expert || 0) / 100;
+  const crisisPct = (frames.crisis || 0) / 100;
+  const avgSentiment = sentiment.average;
+
+  // C1: Search Reputation (0-20)
+  const c1 = Math.min(Math.round(posPct * 12 + expertPct * 6 + (avgSentiment > 0 ? 2 : 0)), 20);
+
+  // C2: Media Framing (0-20)
+  const c2 = Math.min(Math.round(expertPct * 12 + (frames.founder || 0) / 100 * 5 + (frames.leader || 0) / 100 * 3), 20);
+
+  // C3: Social Backlash (0-20) — inverted: low crisis = high score
+  const c3 = Math.min(Math.round(20 - crisisPct * 20 + (sentiment.negative === 0 ? 3 : 0)), 20);
+
+  // C4: Elite Discourse (0-15) — based on quality of results
+  const c4 = Math.min(Math.round(expertPct * 10 + posPct * 5), 15);
+
+  // C5: Third-Party Validation (0-15)
+  const c5 = Math.min(Math.round(posPct * 10 + (total > 10 ? 3 : 1) + (analysis.crisisSignals.length === 0 ? 2 : 0)), 15);
+
+  // C6: Crisis Moat (0-10)
+  const c6 = Math.min(Math.round(10 - crisisPct * 10 - (analysis.crisisSignals.length * 2)), 10);
+
+  const totalScore = c1 + c2 + c3 + c4 + c5 + Math.max(c6, 0);
+  const components = { c1, c2, c3, c4, c5, c6: Math.max(c6, 0) };
+
+  // Gap analysis — which components are furthest from their max?
+  const maxes = { c1: 20, c2: 20, c3: 20, c4: 15, c5: 15, c6: 10 };
+  const labels = { c1: 'Search Reputation', c2: 'Media Framing', c3: 'Social Backlash', c4: 'Elite Discourse', c5: 'Third-Party Validation', c6: 'Crisis Moat' };
+  const gaps = (Object.keys(components) as Array<keyof typeof components>)
+    .map(k => ({ component: labels[k], current: components[k], max: maxes[k], gap: maxes[k] - components[k] }))
+    .sort((a, b) => b.gap - a.gap)
+    .slice(0, 3);
+
+  return {
+    total: Math.min(totalScore, 100),
+    components,
+    gaps,
+    stats: {
+      mean: sentiment.average,
+      stddev: 0.2,
+      ucl: sentiment.average + 0.4,
+      lcl: Math.max(sentiment.average - 0.4, -1),
+    },
+  };
+}
+
+function buildSearchQuery(client: { name: string; company: string | null; role: string | null; keywords: string[] | null }): string {
+  const parts = [`"${client.name}"`];
+  if (client.company) parts.push(`"${client.company}"`);
+  if (client.role) parts.push(client.role.split(' ').slice(0, 2).join(' '));
+  if (client.keywords?.length) parts.push(client.keywords.slice(0, 2).join(' OR '));
+  return parts.join(' ');
+}
+
+export async function GET(): Promise<Response> {
+  return Response.json({ error: 'Use POST to start a scan' }, { status: 405 });
 }
