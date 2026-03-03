@@ -38,11 +38,11 @@
   "crons": [
     {
       "path": "/api/cron/crisis-monitor",
-      "schedule": "0 9 * * *"
+      "schedule": "0 */4 * * *"
     },
     {
       "path": "/api/cron/lsi-weekly",
-      "schedule": "0 3 * * *"
+      "schedule": "0 3 * * 1"
     }
   ],
   "headers": [
