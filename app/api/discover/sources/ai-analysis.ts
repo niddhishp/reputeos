@@ -9,16 +9,8 @@
 
 import { SourceResult, AnalysisResult, LSIResult, ClientProfile } from './types';
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // fallback
-
+// NOTE: env vars read inside functions — module-level reads get 'undefined' in serverless
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
-const OPENROUTER_HEADERS = {
-  'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-  'Content-Type': 'application/json',
-  'HTTP-Referer': 'https://reputeos.com',
-  'X-Title': 'ReputeOS',
-};
 
 async function openRouterChat(
   model: string,
@@ -26,13 +18,24 @@ async function openRouterChat(
   maxTokens = 1000,
   jsonMode = false
 ): Promise<string | null> {
-  const key = OPENROUTER_API_KEY ?? OPENAI_API_KEY;
-  if (!key) return null;
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+  const OPENAI_API_KEY     = process.env.OPENAI_API_KEY;
 
-  const baseUrl = OPENROUTER_API_KEY ? OPENROUTER_BASE : 'https://api.openai.com/v1';
+  const key = OPENROUTER_API_KEY ?? OPENAI_API_KEY;
+  if (!key) {
+    console.warn('[ReputeOS] No OpenRouter/OpenAI key — skipping AI call');
+    return null;
+  }
+
+  const baseUrl     = OPENROUTER_API_KEY ? OPENROUTER_BASE : 'https://api.openai.com/v1';
   const actualModel = OPENROUTER_API_KEY ? model : 'gpt-4o-mini';
-  const headers = OPENROUTER_API_KEY
-    ? OPENROUTER_HEADERS
+  const headers: Record<string, string> = OPENROUTER_API_KEY
+    ? {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://reputeos.com',
+        'X-Title': 'ReputeOS',
+      }
     : { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' };
 
   try {
@@ -357,7 +360,7 @@ Return ONLY a JSON object: {"archetypes": ["archetype1", "archetype2"], "rationa
   let summary = `Discovery scan complete for ${client.name}. Found ${enrichedResults.length} mentions across ${new Set(enrichedResults.map(r => r.source)).size} sources.`;
 
   const narrativeResponse = await openRouterChat(
-    'anthropic/claude-haiku-20240307',
+    'anthropic/claude-3-haiku',
     [{
       role: 'user',
       content: `Write a 3-sentence executive summary of the reputation profile for ${client.name}${client.company ? ` at ${client.company}` : ''}. 
