@@ -9,7 +9,7 @@
 
 import { createClient, createAdminClient, verifyClientOwnership } from '@/lib/supabase/server';
 import { z } from 'zod';
-import { ClientProfile, SourceResult } from '../sources/types';
+import { ClientProfile, SourceResult, AnalysisResult, LSIResult } from '../sources/types';
 import { fetchSearchSources } from '../sources/search';
 import { fetchNewsSources } from '../sources/news';
 import { fetchSocialSources } from '../sources/social';
@@ -106,18 +106,32 @@ async function runScan(
 
   await updateProgress(admin, runId, 10, 'Starting 62-source parallel scan across India...');
 
-  // ── PHASE 1: All 7 source modules run simultaneously ───────────────────────
+  // ── PHASE 1: All 7 modules in parallel with live progress ticks ────────────
+  // Wraps each module so the bar moves as each one finishes (12–50%)
+  // instead of jumping from 10% to 55% in one go.
+  let completedModules = 0;
+  const MODULE_COUNT = 7;
+
+  function wrapModule<T>(promise: Promise<T>, label: string): Promise<T> {
+    return promise.then(result => {
+      completedModules++;
+      const pct = 12 + Math.round((completedModules / MODULE_COUNT) * 38);
+      updateProgress(admin, runId, pct, `${label} done (${completedModules}/${MODULE_COUNT})...`).catch(() => {});
+      return result;
+    });
+  }
+
   const [
     searchResult, newsResult, socialResult, financialResult,
     regulatoryResult, academicResult, videoResult,
   ] = await Promise.allSettled([
-    fetchSearchSources(client),
-    fetchNewsSources(client),
-    fetchSocialSources(client),
-    fetchFinancialSources(client),
-    fetchRegulatorySources(client),
-    fetchAcademicSources(client),
-    fetchVideoSources(client),
+    wrapModule(fetchSearchSources(client),     'Search & AI'),
+    wrapModule(fetchNewsSources(client),       'News & Media'),
+    wrapModule(fetchSocialSources(client),     'Social Media'),
+    wrapModule(fetchFinancialSources(client),  'Financial'),
+    wrapModule(fetchRegulatorySources(client), 'Regulatory'),
+    wrapModule(fetchAcademicSources(client),   'Academic'),
+    wrapModule(fetchVideoSources(client),      'Video & Podcasts'),
   ]);
 
   await updateProgress(admin, runId, 55, 'Sources fetched. Running AI sentiment & frame analysis...');
@@ -154,8 +168,22 @@ async function runScan(
 
   await updateProgress(admin, runId, 65, `${allResults.length} mentions found. Classifying sentiment & frames...`);
 
-  // ── PHASE 2: AI Analysis ───────────────────────────────────────────────────
-  const { enrichedResults, analysis, lsi } = await runFullAnalysis(allResults, client);
+  // ── PHASE 2: AI Analysis with heartbeat ────────────────────────────────────
+  // AI batches can take 20-40s — nudge progress every 4s so bar doesn't freeze
+  let aiPct = 65;
+  const aiHeartbeat = setInterval(() => {
+    if (aiPct < 82) {
+      aiPct += 3;
+      updateProgress(admin, runId, aiPct, `AI analysing ${allResults.length} mentions...`).catch(() => {});
+    }
+  }, 4000);
+
+  let enrichedResults: SourceResult[], analysis: AnalysisResult, lsi: LSIResult;
+  try {
+    ({ enrichedResults, analysis, lsi } = await runFullAnalysis(allResults, client));
+  } finally {
+    clearInterval(aiHeartbeat);
+  }
 
   await updateProgress(admin, runId, 85, 'AI analysis complete. Saving to database...');
 

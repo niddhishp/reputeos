@@ -106,14 +106,15 @@ async function fetchApifyActor(
 ): Promise<SourceResult[]> {
   if (!APIFY_TOKEN) return [];
   try {
-    // Hard 30s timeout - Apify can be slow, never block the whole scan
+    // 5s hard limit — no credits = Apify hangs indefinitely,
+    // blocking the entire parallel scan. Fail fast, never block.
     const startRes = await fetch(
-      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&memory=256&timeout=25`,
+      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&memory=256&timeout=4`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
-        signal: AbortSignal.timeout(30000), // 30s max, then skip
+        signal: AbortSignal.timeout(5000),
       }
     );
     if (!startRes.ok) return [];
