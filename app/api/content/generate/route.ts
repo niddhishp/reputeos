@@ -146,8 +146,8 @@ Write ONLY the content. No preamble. No "Here is your article:". No meta-comment
   // Claude Sonnet for long-form, GPT-4o-mini for short posts
   const model = openrouterKey
     ? (platform === 'linkedin_short' || platform === 'twitter_thread'
-      ? 'anthropic/claude-haiku-3-5'
-      : 'anthropic/claude-sonnet-4-5')
+      ? 'anthropic/claude-3.5-haiku'
+      : 'anthropic/claude-3.5-sonnet')
     : 'gpt-4o';
 
   const maxTokens = platform === 'whitepaper' ? 3500 : platform === 'twitter_thread' ? 1200 : 2000;

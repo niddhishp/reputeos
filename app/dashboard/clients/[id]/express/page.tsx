@@ -274,14 +274,14 @@ function PillarGeneratePanel({ pillar, clientId, positioning, influencerTemplate
             placeholder={`e.g. Why ${pillar.themes[0] ?? pillar.name} is changing the industry`}
             style={{ flex: 1, padding: '9px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: `1px solid ${topic ? GOLD + '60' : BORDER}`, color: 'white', fontSize: 13, outline: 'none', fontFamily: "'Inter', system-ui" }}
           />
-          <button onClick={() => generate()} disabled={generating || !topic.trim()} style={{ padding: '9px 18px', borderRadius: 8, background: generating || !topic.trim() ? 'rgba(201,168,76,0.3)' : GOLD, color: BG, fontWeight: 700, fontSize: 13, border: 'none', cursor: generating || !topic.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+          <button onClick={() => generate(topic.trim() || pillar.name)} disabled={generating} style={{ padding: '9px 18px', borderRadius: 8, background: generating ? 'rgba(201,168,76,0.3)' : GOLD, color: BG, fontWeight: 700, fontSize: 13, border: 'none', cursor: generating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
             <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
             {generating ? <><RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />Generating…</> : <><Sparkles size={13} />Generate</>}
           </button>
         </div>
       </div>
 
-      {error && <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, padding: '9px 13px', color: '#f87171', fontSize: 12, display: 'flex', alignItems: 'center', gap: 7 }}><AlertTriangle size={12} />{error}</div>}
+      {error && <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, padding: '11px 14px', marginTop: 12, color: '#f87171', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}><AlertTriangle size={14} />{error}</div>}
     </div>
   );
 }
