@@ -141,16 +141,29 @@ function RunAnalysisPanel({ clientId, hasDiscover, hasLSI, onComplete }: {
         if (!lsiRes.ok) { const d = await lsiRes.json(); throw new Error(d.message || 'LSI failed'); }
       }
 
-      // Step 2: Archetype assignment
-      setStep('Running AI archetype analysis…');
+      // Step 2: Archetype assignment — fully AI-driven from scan data
+      setStep('AI analysing scan data → assigning archetype…');
       const arcRes = await fetch('/api/archetype/assign', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId }),
       });
       if (!arcRes.ok) { const d = await arcRes.json(); throw new Error(d.message || 'Archetype analysis failed'); }
 
-      setStep('Saving positioning strategy…');
-      await new Promise(r => setTimeout(r, 800));
+      // Step 3: Auto-discover top influencers in the assigned archetype
+      setStep('Finding top influencers in your archetype…');
+      try {
+        await fetch('/api/influencer/discover', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, autoDiscover: true, limit: 3 }),
+          signal: AbortSignal.timeout(90000),
+        });
+      } catch {
+        // Non-blocking: continue even if influencer discovery fails
+        console.warn('Influencer discovery skipped');
+      }
+
+      setStep('Building your content strategy…');
+      await new Promise(r => setTimeout(r, 600));
       onComplete();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed');
@@ -181,10 +194,10 @@ function RunAnalysisPanel({ clientId, hasDiscover, hasLSI, onComplete }: {
           </div>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 10 }}>Archetype Analysis</h2>
           <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 8, lineHeight: 1.7 }}>
-            AI will analyse your 62-source scan data to assign your optimal Jungian character archetype, business archetype, followability score, 5 content pillars, and strategic insights.
+            The AI reads your 62-source scan data and assigns your archetype automatically — no selection needed. It then builds your full content strategy and finds your top influencer benchmarks.
           </p>
           <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginBottom: 32 }}>
-            ~30–45 seconds · Uses GPT-4o
+            ~60–90 seconds · Archetype + Influencer DNA + Content Strategy
           </p>
 
           {error && (

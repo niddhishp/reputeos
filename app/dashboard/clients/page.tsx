@@ -16,7 +16,7 @@ const MODULE_STEPS = [
   { key: 'profile', label: 'Create your profile', icon: UserCircle, desc: 'Add your basic information and LinkedIn URL', color: '#6366f1' },
   { key: 'discover', label: 'Run Discovery Scan', icon: Search, desc: 'Scan 50+ sources to audit your digital footprint', color: '#0ea5e9' },
   { key: 'diagnose', label: 'Get your LSI Score', icon: BarChart2, desc: 'Calculate your 6-component reputation score', color: '#8b5cf6' },
-  { key: 'position', label: 'Choose your Archetype', icon: Target, desc: 'Pick from 54 archetypes and lock your strategy', color: '#C9A84C' },
+  { key: 'position', label: 'AI Archetype Assignment', icon: Target, desc: 'AI assigns your archetype from scan data & builds content strategy', color: '#C9A84C' },
   { key: 'express', label: 'Create content', icon: PenLine, desc: 'Generate NLP-validated thought leadership content', color: '#10b981' },
   { key: 'validate', label: 'Validate your results', icon: CheckSquare, desc: 'Generate board-ready reports with statistical proof', color: '#f59e0b' },
 ];
