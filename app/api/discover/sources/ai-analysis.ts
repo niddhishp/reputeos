@@ -447,16 +447,17 @@ export async function generateDiscoveryReport(
           { role: 'system', content: systemPrompt },
           { role: 'user',   content: userPrompt },
         ],
-        max_tokens: 6000,
-        temperature: 0.4,
+        max_tokens: 8000,
+        temperature: 0.3,
         response_format: { type: 'json_object' },
       }),
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error('[ReputeOS] Discovery report API error:', res.status, errText.slice(0, 200));
+      console.error('[ReputeOS] Discovery report API error:', res.status, errText.slice(0, 400));
+      // Try fallback model if primary fails
       return null;
     }
 
