@@ -80,12 +80,10 @@ export async function callAI(opts: AICallOptions): Promise<AIResponse> {
     if (!res.ok) {
       const err = await res.text();
       console.error(`[callAI] OpenRouter ${res.status}:`, err.slice(0, 300));
-      // Fall through to next provider only on auth/credit errors
-      if (res.status === 401 || res.status === 402 || res.status === 403) {
-        // fall through below
-      } else {
-        throw new Error(`OpenRouter error ${res.status}: ${err.slice(0, 300)}`);
-      }
+      // Fall through to next provider on any routing/auth/credit failure
+      // 401/402/403 = bad key or no credits
+      // 404 = model not available on selected provider (Bedrock not enabled)
+      // In all these cases, try the next provider rather than hard-failing
     } else {
       const data = await res.json() as {
         choices?: Array<{ message: { content: string } }>;
