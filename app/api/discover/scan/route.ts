@@ -69,16 +69,24 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'Failed to create scan record', message: runError?.message }, { status: 500 });
   }
 
-  runScan(run.id, clientId, client, admin).catch(err => {
+  // CRITICAL: Vercel terminates the function the moment a Response is returned.
+  // Any background work (.catch fire-and-forget) is killed immediately.
+  // We MUST await the full scan before returning — the 300s maxDuration in
+  // vercel.json gives us plenty of time. The UI polls Supabase for progress,
+  // so the user sees live updates regardless of when this HTTP call resolves.
+  try {
+    await runScan(run.id, clientId, client, admin);
+  } catch (err) {
     console.error('Scan failed:', err);
-    admin.from('discover_runs').update({
+    await admin.from('discover_runs').update({
       status: 'failed',
-      error_message: String(err?.message ?? 'Unknown error'),
+      error_message: String((err as Error)?.message ?? 'Unknown error'),
       completed_at: new Date().toISOString(),
-    }).eq('id', run.id).then(() => {});
-  });
+    }).eq('id', run.id);
+    return Response.json({ error: 'Scan failed', runId: run.id }, { status: 500 });
+  }
 
-  return Response.json({ success: true, runId: run.id, status: 'running' }, { status: 202 });
+  return Response.json({ success: true, runId: run.id, status: 'completed' }, { status: 200 });
 }
 
 async function updateProgress(

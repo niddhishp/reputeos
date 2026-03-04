@@ -90,19 +90,36 @@ export default function DiscoverPage() {
   async function startScan() {
     setStarting(true);
     setError(null);
+
+    // Start polling immediately so UI updates as soon as run record appears
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(fetchLatestRun, 2500);
+
     try {
+      // Scan now runs synchronously on the server (Vercel was killing background tasks).
+      // This fetch will stay open for 60-120s while the scan runs.
+      // The polling interval above keeps the UI updating throughout.
       const res = await fetch('/api/discover/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId }),
+        signal: AbortSignal.timeout(280000), // 280s — just under Vercel's 300s limit
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.message ?? json.error ?? `HTTP ${res.status}`);
       await fetchLatestRun();
-    } catch (e) {
+    } catch (e: unknown) {
+      // AbortError just means scan is still running — poll will show result
+      if (e instanceof Error && e.name === 'AbortError') {
+        await fetchLatestRun();
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Failed to start scan. Please try again.');
     } finally {
       setStarting(false);
+      // Stop polling — status change effect will restart if still running
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      await fetchLatestRun();
     }
   }
 
