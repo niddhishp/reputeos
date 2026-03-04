@@ -45,10 +45,12 @@ export async function callAI(opts: AICallOptions): Promise<AIResponse> {
 
   // ── 1. OpenRouter (preferred — routes to Bedrock, has credits) ──────────────
   if (openrouterKey) {
-    // Full versioned model IDs required for Amazon Bedrock via OpenRouter
+    // OpenRouter model IDs for Amazon Bedrock provider
+    // Haiku is NOT available on Bedrock via OpenRouter — use Sonnet for all calls
+    // claude-3.5-sonnet is confirmed available on Bedrock
     const modelId = model === 'fast'
-      ? 'anthropic/claude-3-haiku-20240307'
-      : 'anthropic/claude-3-5-sonnet-20241022';
+      ? 'anthropic/claude-3.5-sonnet'   // haiku not on Bedrock, use sonnet
+      : 'anthropic/claude-3.5-sonnet';
 
     const body: Record<string, unknown> = {
       model: modelId,
