@@ -19,7 +19,8 @@ export const maxDuration = 120; // seconds — Vercel Pro function budget
 
 export async function POST(req: Request) {
   try {
-    const { runId, clientId } = await req.json() as { runId: string; clientId: string };
+    const body = await req.json() as { runId: string; clientId: string; force?: boolean };
+    const { runId, clientId, force = false } = body;
     if (!runId || !clientId) return NextResponse.json({ error: 'runId and clientId required' }, { status: 400 });
 
     const admin = adminClient();
@@ -34,7 +35,6 @@ export async function POST(req: Request) {
     if (run.status !== 'completed') return NextResponse.json({ error: 'Scan not completed yet' }, { status: 400 });
 
     // If report already exists and caller didn't force regenerate, return it
-    const { force } = await req.json().catch(() => ({ force: false })) as { force?: boolean };
     if (run.discovery_report && !force) {
       return NextResponse.json({ report: run.discovery_report, cached: true });
     }
