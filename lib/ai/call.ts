@@ -45,21 +45,26 @@ export async function callAI(opts: AICallOptions): Promise<AIResponse> {
 
   // ── 1. OpenRouter (preferred — routes to Bedrock, has credits) ──────────────
   if (openrouterKey) {
-    // Verified working model IDs for OpenRouter with Bedrock provider
+    // Amazon Bedrock model IDs via OpenRouter
+    // Must match exactly what Bedrock exposes — claude-3-haiku and claude-3-5-sonnet
     const modelId = model === 'fast'
-      ? 'anthropic/claude-3-haiku'
-      : 'anthropic/claude-3.5-sonnet';
+      ? 'anthropic/claude-3-haiku'       // us.anthropic.claude-3-haiku-20240307-v1:0
+      : 'anthropic/claude-3-5-sonnet';   // us.anthropic.claude-3-5-sonnet-20241022-v2:0
 
     const body: Record<string, unknown> = {
       model: modelId,
+      // Force Amazon Bedrock — the only enabled provider on this account
+      provider: { order: ['amazon-bedrock'], allow_fallbacks: false },
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: systemPrompt + (json ? '\n\nIMPORTANT: Respond with ONLY a valid JSON object. No markdown, no explanation, no code fences. Pure JSON only.' : '') },
         { role: 'user',   content: userPrompt },
       ],
       max_tokens:  maxTokens,
       temperature,
     };
-    if (json) body.response_format = { type: 'json_object' };
+    // Bedrock via OpenRouter does NOT support response_format: json_object
+    // We instruct via the user prompt and parse manually instead
+    // if (json) body.response_format = { type: 'json_object' }; // disabled for Bedrock
 
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method:  'POST',
