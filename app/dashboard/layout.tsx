@@ -20,7 +20,7 @@ export default async function DashboardLayout({
     .from('user_profiles')
     .select('role, name')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   const role =
     profile?.role ??
