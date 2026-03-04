@@ -6,12 +6,11 @@
 
 import { SourceResult, SourceModuleResult, ClientProfile, isRelevant } from './types';
 
-const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
-const APIFY_TOKEN = process.env.APIFY_TOKEN;
-const EXA_API_KEY = process.env.EXA_API_KEY;
+
+
 
 async function fetchTwitterX(client: ClientProfile): Promise<SourceResult[]> {
-  if (!X_BEARER_TOKEN) return [];
+  if (!process.env.X_BEARER_TOKEN) return [];
   try {
     const query = `"${client.name}"${client.company ? ` OR "${client.company}"` : ''} -is:retweet lang:en`;
     const url = new URL('https://api.twitter.com/2/tweets/search/recent');
@@ -22,7 +21,7 @@ async function fetchTwitterX(client: ClientProfile): Promise<SourceResult[]> {
     url.searchParams.set('user.fields', 'name,username,verified');
 
     const res = await fetch(url.toString(), {
-      headers: { 'Authorization': `Bearer ${X_BEARER_TOKEN}` },
+      headers: { 'Authorization': `Bearer ${process.env.X_BEARER_TOKEN}` },
       signal: AbortSignal.timeout(8000), // 8s hard limit
     });
     if (!res.ok) return [];
@@ -104,12 +103,12 @@ async function fetchApifyActor(
   mapResult: (item: Record<string, unknown>) => SourceResult | null,
   limit = 8
 ): Promise<SourceResult[]> {
-  if (!APIFY_TOKEN) return [];
+  if (!process.env.APIFY_TOKEN) return [];
   try {
     // 5s hard limit — no credits = Apify hangs indefinitely,
     // blocking the entire parallel scan. Fail fast, never block.
     const startRes = await fetch(
-      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&memory=256&timeout=4`,
+      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${process.env.APIFY_TOKEN}&memory=256&timeout=4`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,99 +132,74 @@ async function fetchApifyActor(
 }
 
 async function fetchLinkedIn(client: ClientProfile): Promise<SourceResult[]> {
-  return fetchApifyActor(
-    'apidojo~linkedin-profile-scraper',
-    {
-      searchUrl: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(client.name)}`,
-      maxResults: 3,
-    },
-    'LinkedIn',
-    'social',
-    (item) => {
-      if (!isRelevant(String(item.fullName ?? ''), client.name)) return null;
-      return {
-        source: 'LinkedIn',
-        category: 'social',
-        url: String(item.profileUrl ?? ''),
-        title: `${item.fullName ?? ''} — ${item.headline ?? ''}`,
-        snippet: String(item.summary ?? item.about ?? '').slice(0, 400),
-        metadata: {
-          connections: item.connectionsCount,
-          followers: item.followersCount,
-          location: item.location,
-          currentRole: item.currentPositionTitle,
-          company: item.currentCompany,
-        },
-      };
-    },
-    3
-  );
+  // Use Exa neural search for LinkedIn — no Apify actor required
+  if (!process.env.EXA_API_KEY) return [];
+  try {
+    const query = `${client.name} LinkedIn profile ${client.company ?? ''} ${client.role ?? ''}`;
+    const res = await fetch('https://api.exa.ai/search', {
+      method: 'POST',
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        numResults: 5,
+        includeDomains: ['linkedin.com'],
+        contents: { text: { maxCharacters: 500 } },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results ?? []).map((r: { url: string; title: string; text?: string }) => ({
+      source: 'LinkedIn',
+      category: 'social',
+      url: r.url,
+      title: r.title ?? '',
+      snippet: (r.text ?? '').slice(0, 400),
+    }));
+  } catch { return []; }
 }
 
 async function fetchYouTubeDeep(client: ClientProfile): Promise<SourceResult[]> {
-  return fetchApifyActor(
-    'streamers~youtube-scraper',
-    {
-      searchKeywords: [`${client.name} interview`, `${client.name} talk`, `${client.name} ${client.company ?? ''}`],
-      maxResults: 6,
-      resultsType: 'SEARCH',
-    },
-    'YouTube Deep',
-    'video',
-    (item) => ({
+  // Use Exa to find YouTube content — no Apify required
+  if (!process.env.EXA_API_KEY) return [];
+  try {
+    const query = `${client.name} ${client.company ?? ''} interview talk keynote`;
+    const res = await fetch('https://api.exa.ai/search', {
+      method: 'POST',
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        numResults: 6,
+        includeDomains: ['youtube.com', 'youtu.be'],
+        contents: { text: { maxCharacters: 400 } },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results ?? []).map((r: { url: string; title: string; text?: string; publishedDate?: string }) => ({
       source: 'YouTube',
       category: 'video',
-      url: `https://youtube.com/watch?v=${item.id ?? ''}`,
-      title: String(item.title ?? ''),
-      snippet: String(item.description ?? '').slice(0, 300),
-      date: String(item.date ?? ''),
-      metadata: {
-        views: item.viewCount,
-        likes: item.likes,
-        channel: item.channelName,
-        duration: item.duration,
-      },
-    }),
-    6
-  );
+      url: r.url,
+      title: r.title ?? '',
+      snippet: (r.text ?? '').slice(0, 300),
+      date: r.publishedDate ?? '',
+    }));
+  } catch { return []; }
 }
 
-async function fetchInstagram(client: ClientProfile): Promise<SourceResult[]> {
-  return fetchApifyActor(
-    'apidojo~instagram-search-scraper',
-    {
-      searchType: 'user',
-      searchQuery: client.name,
-      resultsLimit: 3,
-    },
-    'Instagram',
-    'social',
-    (item) => {
-      if (!isRelevant(String(item.fullName ?? item.username ?? ''), client.name)) return null;
-      return {
-        source: 'Instagram',
-        category: 'social',
-        url: `https://instagram.com/${item.username ?? ''}`,
-        title: `${item.fullName ?? item.username ?? ''} on Instagram`,
-        snippet: String(item.biography ?? '').slice(0, 300),
-        metadata: {
-          followers: item.followersCount,
-          posts: item.postsCount,
-          verified: item.verified,
-          username: item.username,
-        },
-      };
-    },
-    3
-  );
+async function fetchInstagram(_client: ClientProfile): Promise<SourceResult[]> {
+  // Instagram requires Apify — skip when no credits available
+  return [];
 }
+
 
 async function fetchMediumSubstack(client: ClientProfile): Promise<SourceResult[]> {
-  if (!EXA_API_KEY) return [];
+  if (!process.env.EXA_API_KEY) return [];
   try {
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
-      headers: { 'x-api-key': EXA_API_KEY, 'Content-Type': 'application/json' },
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: `${client.name} articles writings thoughts`,
         numResults: 6,
@@ -293,11 +267,11 @@ async function fetchGitHub(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchQuora(client: ClientProfile): Promise<SourceResult[]> {
-  if (!EXA_API_KEY) return [];
+  if (!process.env.EXA_API_KEY) return [];
   try {
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
-      headers: { 'x-api-key': EXA_API_KEY, 'Content-Type': 'application/json' },
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: `${client.name} ${client.company ?? ''} answers questions`,
         numResults: 4,

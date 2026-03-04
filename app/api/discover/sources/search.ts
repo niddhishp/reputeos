@@ -7,9 +7,8 @@
 
 import { SourceResult, SourceModuleResult, ClientProfile, buildSearchQuery, isRelevant } from './types';
 
-const SERPAPI_KEY = process.env.SERPAPI_KEY;
-const EXA_API_KEY = process.env.EXA_API_KEY;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+
+
 
 async function serpSearch(
   params: Record<string, string>,
@@ -18,10 +17,10 @@ async function serpSearch(
   client: ClientProfile,
   limit = 8
 ): Promise<SourceResult[]> {
-  if (!SERPAPI_KEY) return [];
+  if (!process.env.SERPAPI_KEY) return [];
   try {
     const url = new URL('https://serpapi.com/search');
-    url.searchParams.set('api_key', SERPAPI_KEY);
+    url.searchParams.set('api_key', process.env.SERPAPI_KEY);
     url.searchParams.set('num', String(limit));
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
@@ -78,11 +77,11 @@ async function serpSearch(
 }
 
 async function exaSearch(query: string, numResults = 8, category = 'search'): Promise<SourceResult[]> {
-  if (!EXA_API_KEY) return [];
+  if (!process.env.EXA_API_KEY) return [];
   try {
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
-      headers: { 'x-api-key': EXA_API_KEY, 'Content-Type': 'application/json' },
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
         numResults,
@@ -201,14 +200,14 @@ async function semanticScholarSearch(name: string): Promise<SourceResult[]> {
 }
 
 async function perplexitySynthesis(client: ClientProfile): Promise<SourceResult[]> {
-  if (!OPENROUTER_API_KEY) return [];
+  if (!process.env.OPENROUTER_API_KEY) return [];
   try {
     const prompt = `Search the web and provide a detailed reputation summary for ${client.name}${client.company ? `, ${client.role ?? ''} at ${client.company}` : ''}${client.industry ? ` in the ${client.industry} industry` : ''}. Include: their public standing, notable achievements, any controversies, media coverage, and how they are perceived professionally in India. Be factual and cite specific examples.`;
 
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://reputeos.com',
         'X-Title': 'ReputeOS',

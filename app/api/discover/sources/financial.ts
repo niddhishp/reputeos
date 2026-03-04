@@ -7,8 +7,8 @@
 
 import { SourceResult, SourceModuleResult, ClientProfile, isRelevant } from './types';
 
-const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
-const EXA_API_KEY = process.env.EXA_API_KEY;
+
+
 
 async function fetchBSEAnnouncements(client: ClientProfile): Promise<SourceResult[]> {
   try {
@@ -107,7 +107,7 @@ async function firecrawlScrape(
   category: string,
   extractSchema?: Record<string, unknown>
 ): Promise<{ content: string; metadata: Record<string, unknown> } | null> {
-  if (!FIRECRAWL_API_KEY) return null;
+  if (!process.env.FIRECRAWL_API_KEY) return null;
   try {
     const body: Record<string, unknown> = {
       url,
@@ -122,7 +122,7 @@ async function firecrawlScrape(
     const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+        'Authorization': `Bearer ${process.env.FIRECRAWL_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -140,7 +140,7 @@ async function firecrawlScrape(
 }
 
 async function fetchTofler(client: ClientProfile): Promise<SourceResult[]> {
-  if (!FIRECRAWL_API_KEY) return [];
+  if (!process.env.FIRECRAWL_API_KEY) return [];
   try {
     const searchName = encodeURIComponent(client.company ?? client.name);
     const scraped = await firecrawlScrape(
@@ -172,7 +172,7 @@ async function fetchTofler(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchZaubaCorp(client: ClientProfile): Promise<SourceResult[]> {
-  if (!FIRECRAWL_API_KEY) return [];
+  if (!process.env.FIRECRAWL_API_KEY) return [];
   try {
     const searchName = encodeURIComponent(client.name);
     const scraped = await firecrawlScrape(
@@ -200,12 +200,12 @@ async function fetchZaubaCorp(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchExaFinancial(client: ClientProfile): Promise<SourceResult[]> {
-  if (!EXA_API_KEY) return [];
+  if (!process.env.EXA_API_KEY) return [];
   try {
     const query = `${client.name} ${client.company ?? ''} funding investment startup profile`;
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
-      headers: { 'x-api-key': EXA_API_KEY, 'Content-Type': 'application/json' },
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
         numResults: 8,

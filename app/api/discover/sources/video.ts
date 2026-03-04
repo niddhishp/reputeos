@@ -7,13 +7,11 @@
 
 import { SourceResult, SourceModuleResult, ClientProfile, isRelevant } from './types';
 
-const SERPAPI_KEY = process.env.SERPAPI_KEY;
-const PODCAST_INDEX_KEY = process.env.PODCAST_INDEX_KEY;
-const PODCAST_INDEX_SECRET = process.env.PODCAST_INDEX_SECRET;
-const EXA_API_KEY = process.env.EXA_API_KEY;
+
+
 
 async function fetchYouTubeViaSerpAPI(client: ClientProfile): Promise<SourceResult[]> {
-  if (!SERPAPI_KEY) return [];
+  if (!process.env.SERPAPI_KEY) return [];
   try {
     const queries = [
       `${client.name} interview`,
@@ -24,7 +22,7 @@ async function fetchYouTubeViaSerpAPI(client: ClientProfile): Promise<SourceResu
     const all: SourceResult[] = [];
     for (const q of queries) {
       const url = new URL('https://serpapi.com/search');
-      url.searchParams.set('api_key', SERPAPI_KEY);
+      url.searchParams.set('api_key', process.env.SERPAPI_KEY);
       url.searchParams.set('engine', 'youtube');
       url.searchParams.set('search_query', q);
       url.searchParams.set('gl', 'in');
@@ -65,11 +63,11 @@ async function fetchYouTubeViaSerpAPI(client: ClientProfile): Promise<SourceResu
 }
 
 async function fetchPodcastIndex(client: ClientProfile): Promise<SourceResult[]> {
-  if (!PODCAST_INDEX_KEY || !PODCAST_INDEX_SECRET) return [];
+  if (!process.env.PODCAST_INDEX_KEY || !process.env.PODCAST_INDEX_SECRET) return [];
   try {
     // Podcast Index requires HMAC auth
     const apiHeaderTime = Math.floor(Date.now() / 1000);
-    const authString = PODCAST_INDEX_KEY + PODCAST_INDEX_SECRET + apiHeaderTime;
+    const authString = process.env.PODCAST_INDEX_KEY + process.env.PODCAST_INDEX_SECRET + apiHeaderTime;
 
     // Build SHA1 hash
     const encoder = new TextEncoder();
@@ -81,7 +79,7 @@ async function fetchPodcastIndex(client: ClientProfile): Promise<SourceResult[]>
     const searchUrl = `https://api.podcastindex.org/api/1.0/search/byterm?q=${encodeURIComponent(client.name)}&max=10&clean`;
     const res = await fetch(searchUrl, {
       headers: {
-        'X-Auth-Key': PODCAST_INDEX_KEY,
+        'X-Auth-Key': process.env.PODCAST_INDEX_KEY,
         'X-Auth-Date': apiHeaderTime.toString(),
         'Authorization': hash,
         'User-Agent': 'ReputeOS/1.0',
@@ -115,7 +113,7 @@ async function fetchPodcastIndex(client: ClientProfile): Promise<SourceResult[]>
     const episodeUrl = `https://api.podcastindex.org/api/1.0/search/episode/bytitle?q=${encodeURIComponent(client.name)}&max=8&clean`;
     const episodeRes = await fetch(episodeUrl, {
       headers: {
-        'X-Auth-Key': PODCAST_INDEX_KEY,
+        'X-Auth-Key': process.env.PODCAST_INDEX_KEY,
         'X-Auth-Date': apiHeaderTime.toString(),
         'Authorization': hash,
         'User-Agent': 'ReputeOS/1.0',
@@ -150,12 +148,12 @@ async function fetchPodcastIndex(client: ClientProfile): Promise<SourceResult[]>
 }
 
 async function fetchExaVideo(client: ClientProfile): Promise<SourceResult[]> {
-  if (!EXA_API_KEY) return [];
+  if (!process.env.EXA_API_KEY) return [];
   try {
     const query = `${client.name} podcast interview talk speech keynote`;
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
-      headers: { 'x-api-key': EXA_API_KEY, 'Content-Type': 'application/json' },
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
         numResults: 10,

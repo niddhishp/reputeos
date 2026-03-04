@@ -6,15 +6,15 @@
 
 import { SourceResult, SourceModuleResult, ClientProfile, isRelevant } from './types';
 
-const SERPAPI_KEY = process.env.SERPAPI_KEY;
-const EXA_API_KEY = process.env.EXA_API_KEY;
+
+
 
 async function fetchGoogleScholar(client: ClientProfile): Promise<SourceResult[]> {
-  if (!SERPAPI_KEY) return [];
+  if (!process.env.SERPAPI_KEY) return [];
   try {
     // Search for papers by/about this person
     const url = new URL('https://serpapi.com/search');
-    url.searchParams.set('api_key', SERPAPI_KEY);
+    url.searchParams.set('api_key', process.env.SERPAPI_KEY);
     url.searchParams.set('engine', 'google_scholar');
     url.searchParams.set('q', `"${client.name}"`);
     url.searchParams.set('num', '8');
@@ -111,13 +111,13 @@ async function fetchSemanticScholar(client: ClientProfile): Promise<SourceResult
 }
 
 async function fetchExaAcademic(client: ClientProfile): Promise<SourceResult[]> {
-  if (!EXA_API_KEY) return [];
+  if (!process.env.EXA_API_KEY) return [];
   try {
     // SSRN, ResearchGate, Academia.edu, IIM/IIT mentions
     const query = `${client.name} research paper article academic industry expertise`;
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
-      headers: { 'x-api-key': EXA_API_KEY, 'Content-Type': 'application/json' },
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
         numResults: 10,

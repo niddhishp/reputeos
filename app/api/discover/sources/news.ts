@@ -6,10 +6,8 @@
 
 import { SourceResult, SourceModuleResult, ClientProfile, fetchRSS, buildSearchQuery } from './types';
 
-const NEWSAPI_KEY = process.env.NEWSAPI_KEY;
-const GUARDIAN_API_KEY = process.env.GUARDIAN_API_KEY;
-const NYT_API_KEY = process.env.NYT_API_KEY;
-const EXA_API_KEY = process.env.EXA_API_KEY;
+
+
 
 // All Indian RSS feeds — no key needed
 const INDIAN_RSS_FEEDS = [
@@ -26,7 +24,7 @@ const INDIAN_RSS_FEEDS = [
 ];
 
 async function fetchNewsAPI(client: ClientProfile): Promise<SourceResult[]> {
-  if (!NEWSAPI_KEY) return [];
+  if (!process.env.NEWSAPI_KEY) return [];
   try {
     const q = `"${client.name}"${client.company ? ` OR "${client.company}"` : ''}`;
     const url = new URL('https://newsapi.org/v2/everything');
@@ -34,7 +32,7 @@ async function fetchNewsAPI(client: ClientProfile): Promise<SourceResult[]> {
     url.searchParams.set('language', 'en');
     url.searchParams.set('sortBy', 'relevancy');
     url.searchParams.set('pageSize', '10');
-    url.searchParams.set('apiKey', NEWSAPI_KEY);
+    url.searchParams.set('apiKey', process.env.NEWSAPI_KEY);
 
     const res = await fetch(url.toString(), { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return [];
@@ -61,13 +59,13 @@ async function fetchNewsAPI(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchGuardian(client: ClientProfile): Promise<SourceResult[]> {
-  if (!GUARDIAN_API_KEY) return [];
+  if (!process.env.GUARDIAN_API_KEY) return [];
   try {
     const url = new URL('https://content.guardianapis.com/search');
     url.searchParams.set('q', `"${client.name}"`);
     url.searchParams.set('show-fields', 'trailText,byline');
     url.searchParams.set('page-size', '5');
-    url.searchParams.set('api-key', GUARDIAN_API_KEY);
+    url.searchParams.set('api-key', process.env.GUARDIAN_API_KEY);
 
     const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return [];
@@ -92,13 +90,13 @@ async function fetchGuardian(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchNYT(client: ClientProfile): Promise<SourceResult[]> {
-  if (!NYT_API_KEY) return [];
+  if (!process.env.NYT_API_KEY) return [];
   try {
     const url = new URL('https://api.nytimes.com/svc/search/v2/articlesearch.json');
     url.searchParams.set('q', `"${client.name}"`);
     url.searchParams.set('sort', 'relevance');
     url.searchParams.set('fl', 'headline,snippet,web_url,pub_date,source');
-    url.searchParams.set('api-key', NYT_API_KEY);
+    url.searchParams.set('api-key', process.env.NYT_API_KEY);
 
     const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return [];
@@ -123,12 +121,12 @@ async function fetchNYT(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchExaNews(client: ClientProfile): Promise<SourceResult[]> {
-  if (!EXA_API_KEY) return [];
+  if (!process.env.EXA_API_KEY) return [];
   try {
     const query = `${client.name} ${client.company ?? ''} news coverage India`;
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
-      headers: { 'x-api-key': EXA_API_KEY, 'Content-Type': 'application/json' },
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
         numResults: 12,

@@ -7,9 +7,8 @@
 
 import { SourceResult, SourceModuleResult, ClientProfile, isRelevant } from './types';
 
-const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
-const EXA_API_KEY = process.env.EXA_API_KEY;
-const SERPAPI_KEY = process.env.SERPAPI_KEY;
+
+
 
 interface FirecrawlResult {
   content: string;
@@ -17,12 +16,12 @@ interface FirecrawlResult {
 }
 
 async function firecrawlScrape(url: string): Promise<FirecrawlResult | null> {
-  if (!FIRECRAWL_API_KEY) return null;
+  if (!process.env.FIRECRAWL_API_KEY) return null;
   try {
     const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+        'Authorization': `Bearer ${process.env.FIRECRAWL_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -50,11 +49,11 @@ async function searchRegulatoryViaSerp(
   sourceName: string,
   category: string
 ): Promise<SourceResult[]> {
-  if (!SERPAPI_KEY) return [];
+  if (!process.env.SERPAPI_KEY) return [];
   try {
     const q = `site:${site} "${name}"`;
     const url = new URL('https://serpapi.com/search');
-    url.searchParams.set('api_key', SERPAPI_KEY);
+    url.searchParams.set('api_key', process.env.SERPAPI_KEY);
     url.searchParams.set('engine', 'google');
     url.searchParams.set('q', q);
     url.searchParams.set('num', '5');
@@ -99,7 +98,7 @@ async function fetchSEBI(client: ClientProfile): Promise<SourceResult[]> {
   }
 
   // Firecrawl SEBI search page as fallback
-  if (!results.length && FIRECRAWL_API_KEY) {
+  if (!results.length && process.env.FIRECRAWL_API_KEY) {
     const scraped = await firecrawlScrape(
       `https://www.sebi.gov.in/enforcement/orders/search.html?searchText=${encodeURIComponent(name)}`
     );
@@ -142,7 +141,7 @@ async function fetchRBI(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchMCA(client: ClientProfile): Promise<SourceResult[]> {
-  if (!FIRECRAWL_API_KEY) return [];
+  if (!process.env.FIRECRAWL_API_KEY) return [];
   try {
     const searchName = encodeURIComponent(client.name);
 
@@ -201,7 +200,7 @@ async function fetchNCLT(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchCCI(client: ClientProfile): Promise<SourceResult[]> {
-  if (!FIRECRAWL_API_KEY && !SERPAPI_KEY) return [];
+  if (!process.env.FIRECRAWL_API_KEY && !process.env.SERPAPI_KEY) return [];
 
   const results = await searchRegulatoryViaSerp(
     'cci.gov.in', client.company ?? client.name, 'Competition Commission (CCI)', 'regulatory'
@@ -210,12 +209,12 @@ async function fetchCCI(client: ClientProfile): Promise<SourceResult[]> {
 }
 
 async function fetchEDCBI(client: ClientProfile): Promise<SourceResult[]> {
-  if (!EXA_API_KEY) return [];
+  if (!process.env.EXA_API_KEY) return [];
   try {
     const query = `${client.name} ${client.company ?? ''} enforcement directorate ED CBI SFIO probe investigation`;
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
-      headers: { 'x-api-key': EXA_API_KEY, 'Content-Type': 'application/json' },
+      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
         numResults: 6,
