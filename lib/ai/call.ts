@@ -45,12 +45,10 @@ export async function callAI(opts: AICallOptions): Promise<AIResponse> {
 
   // ── 1. OpenRouter (preferred — routes to Bedrock, has credits) ──────────────
   if (openrouterKey) {
-    // Latest Claude models via OpenRouter
-    // sonnet-4.6 for smart (best quality), haiku-4.5 for fast (cheaper/quicker)
-    // Falls back to 3.5-sonnet if 4.x not yet on Bedrock
-    const modelId = model === 'fast'
-      ? 'anthropic/claude-haiku-4-5'
-      : 'anthropic/claude-sonnet-4-5';
+    // Amazon Bedrock via OpenRouter — confirmed working model
+    // Bedrock lags ~3-6 months behind direct Anthropic releases
+    // claude-3.5-sonnet is the latest confirmed available on Bedrock
+    const modelId = 'anthropic/claude-3.5-sonnet';
 
     const body: Record<string, unknown> = {
       model: modelId,
