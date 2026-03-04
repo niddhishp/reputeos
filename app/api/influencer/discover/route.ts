@@ -48,6 +48,7 @@ async function callAI(systemPrompt: string, userPrompt: string, json = true): Pr
     },
     body: JSON.stringify({
       model: 'anthropic/claude-3.5-sonnet',
+      provider: { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true },
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user',   content: userPrompt },

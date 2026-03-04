@@ -153,7 +153,7 @@ Return ONLY valid JSON:
     ? 'https://openrouter.ai/api/v1/chat/completions'
     : 'https://api.openai.com/v1/chat/completions';
   const authKey = openrouterKey && !openaiKey ? openrouterKey : openaiKey;
-  const model = openrouterKey && !openaiKey ? 'openai/gpt-4o' : 'gpt-4o';
+  const model = openrouterKey && !openaiKey ? 'anthropic/claude-3.5-sonnet' : 'gpt-4o';
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -164,6 +164,7 @@ Return ONLY valid JSON:
     },
     body: JSON.stringify({
       model,
+      ...(openrouterKey ? { provider: { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true } } : {}),
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Assign archetypes and positioning for:\n${JSON.stringify(clientProfile, null, 2)}` },

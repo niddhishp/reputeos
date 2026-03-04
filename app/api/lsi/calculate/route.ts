@@ -304,7 +304,8 @@ Return ONLY the JSON object.`;
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST', headers,
       body: JSON.stringify({
-        model, max_tokens: 3000, temperature: 0.4,
+        model,
+        ...(process.env.OPENROUTER_API_KEY ? { provider: { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true } } : {}), max_tokens: 3000, temperature: 0.4,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: systemPrompt },

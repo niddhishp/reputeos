@@ -146,7 +146,7 @@ Write ONLY the content. No preamble. No "Here is your article:". No meta-comment
   // Claude Sonnet for long-form, GPT-4o-mini for short posts
   const model = openrouterKey
     ? (platform === 'linkedin_short' || platform === 'twitter_thread'
-      ? 'anthropic/claude-3.5-haiku'
+      ? 'anthropic/claude-3-haiku'
       : 'anthropic/claude-3.5-sonnet')
     : 'gpt-4o';
 
@@ -162,6 +162,7 @@ Write ONLY the content. No preamble. No "Here is your article:". No meta-comment
       },
       body: JSON.stringify({
         model,
+        ...(openrouterKey ? { provider: { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true } } : {}),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user',   content: `Write a ${spec.label} about: ${topic}` },

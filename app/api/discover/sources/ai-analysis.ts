@@ -40,6 +40,7 @@ async function openRouterChat(
 
   try {
     const body: Record<string, unknown> = { model: actualModel, messages, max_tokens: maxTokens };
+    if (OPENROUTER_API_KEY) body.provider = { order: ['amazon-bedrock', 'anthropic', 'openai', 'deepseek'], allow_fallbacks: true };
     if (jsonMode) body.response_format = { type: 'json_object' };
 
     const res = await fetch(`${baseUrl}/chat/completions`, {
@@ -94,7 +95,7 @@ Items to analyze:
 ${itemsText}`;
 
     const response = await openRouterChat(
-      'deepseek/deepseek-chat',
+      'anthropic/claude-3-haiku',
       [{ role: 'user', content: prompt }],
       800,
       true
@@ -343,7 +344,7 @@ export async function runFullAnalysis(
       .join('\n');
 
     const archetypeResponse = await openRouterChat(
-      'openai/gpt-4o-mini',
+      'anthropic/claude-3-haiku',
       [{
         role: 'user',
         content: `Based on these search results about ${client.name}${client.role ? `, ${client.role}` : ''}${client.industry ? ` in ${client.industry}` : ''}, suggest 2-3 Jungian archetypes that best match their public persona. Choose from: Sage, Hero, Ruler, Creator, Caregiver, Explorer, Rebel, Lover, Jester, Everyman, Magician, Innocent. Also suggest 1-2 professional archetypes like: Maverick CEO, Ecosystem Builder, Technical Visionary, Industry Transformer, Academic Practitioner.
