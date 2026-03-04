@@ -1,19 +1,12 @@
 export const maxDuration = 60;
 
 const CANDIDATES = [
-  'anthropic/claude-opus-4-6',
   'anthropic/claude-sonnet-4-6',
-  'anthropic/claude-opus-4-5',
-  'anthropic/claude-sonnet-4-5',
+  'anthropic/claude-opus-4-6',
   'anthropic/claude-haiku-4-5',
-  'anthropic/claude-opus-4',
-  'anthropic/claude-sonnet-4',
+  'anthropic/claude-sonnet-4-5',
   'anthropic/claude-3.5-sonnet',
   'anthropic/claude-3.5-haiku',
-  'anthropic/claude-3.5-sonnet-20241022',
-  'anthropic/claude-3-haiku',
-  'anthropic/claude-3-opus',
-  'anthropic/claude-3-sonnet',
 ];
 
 async function probe(modelId: string, apiKey: string) {
@@ -26,9 +19,9 @@ async function probe(modelId: string, apiKey: string) {
         'HTTP-Referer': 'https://reputeos.com',
         'X-Title': 'ReputeOS',
       },
+      // No provider override — let OpenRouter route freely
       body: JSON.stringify({
         model: modelId,
-        provider: { order: ['amazon-bedrock'], allow_fallbacks: false },
         messages: [{ role: 'user', content: 'Reply: ok' }],
         max_tokens: 10,
         temperature: 0,
