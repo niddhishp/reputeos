@@ -751,7 +751,7 @@ export default function DiscoverPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ runId, clientId }),
-        signal: AbortSignal.timeout(130_000),
+        signal: AbortSignal.timeout(250_000),
       });
       const data = await res.json() as Record<string,unknown>;
       if (data.report) setDiscoveryReport(data.report as DiscoveryReport);
