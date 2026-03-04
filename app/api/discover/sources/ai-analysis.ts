@@ -63,12 +63,20 @@ export async function analyzeSentimentAndFrames(
 ): Promise<SourceResult[]> {
   if (!results.length) return results;
 
-  // Process in batches of 20 to stay within token limits
-  const BATCH_SIZE = 20;
+  // Process in parallel batches of 15 (max 3 concurrent) to stay within token limits
+  // Sequential batches of 20 was causing 150s+ hangs on large result sets
+  const BATCH_SIZE = 15;
   const enriched: SourceResult[] = [];
-
+  const batches: SourceResult[][] = [];
   for (let i = 0; i < results.length; i += BATCH_SIZE) {
-    const batch = results.slice(i, i + BATCH_SIZE);
+    batches.push(results.slice(i, i + BATCH_SIZE));
+  }
+
+  // Process in groups of 3 concurrent batches
+  const CONCURRENCY = 3;
+  for (let g = 0; g < batches.length; g += CONCURRENCY) {
+    const group = batches.slice(g, g + CONCURRENCY);
+    await Promise.all(group.map(async (batch) => {
 
     const itemsText = batch.map((r, idx) =>
       `[${idx}] Source: ${r.source}\nTitle: ${r.title}\nText: ${r.snippet}`
@@ -112,7 +120,8 @@ ${itemsText}`;
       }
     }
 
-    enriched.push(...batch);
+      enriched.push(...batch);
+    }));
   }
 
   return enriched;

@@ -17,7 +17,7 @@ import { fetchFinancialSources } from '../sources/financial';
 import { fetchRegulatorySources } from '../sources/regulatory';
 import { fetchAcademicSources } from '../sources/academic';
 import { fetchVideoSources } from '../sources/video';
-import { runFullAnalysis } from '../sources/ai-analysis';
+import { runFullAnalysis, calculateLSI } from '../sources/ai-analysis';
 
 const Schema = z.object({ clientId: z.string().uuid() });
 
@@ -104,6 +104,69 @@ async function updateProgress(
   }).eq('id', runId);
 }
 
+// Fallback analysis when AI times out — pure heuristics, no API calls
+function runFallbackAnalysis(
+  results: SourceResult[],
+  client: ClientProfile
+): { analysis: AnalysisResult; lsi: LSIResult } {
+  const positiveWords = ['award', 'launch', 'growth', 'innovative', 'leader', 'success', 'best', 'top', 'leading', 'pioneer', 'expert'];
+  const negativeWords = ['lawsuit', 'fraud', 'scandal', 'controversy', 'resign', 'fired', 'probe', 'crisis', 'fail', 'ban'];
+
+  let pos = 0, neg = 0;
+  const frames: Record<string, number> = { expert: 0, founder: 0, leader: 0, family: 0, crisis: 0, other: 0 };
+
+  for (const r of results) {
+    const text = (r.title + ' ' + r.snippet).toLowerCase();
+    const posCount = positiveWords.filter(w => text.includes(w)).length;
+    const negCount = negativeWords.filter(w => text.includes(w)).length;
+    const sentiment = (posCount - negCount) / Math.max(posCount + negCount, 1);
+    r.sentiment = sentiment;
+
+    if (negCount > 0) { r.frame = 'crisis'; frames.crisis++; }
+    else if (text.includes('found') || text.includes('startup') || text.includes('build')) { r.frame = 'founder'; frames.founder++; }
+    else if (text.includes('expert') || text.includes('research') || text.includes('study')) { r.frame = 'expert'; frames.expert++; }
+    else if (text.includes('lead') || text.includes('direct') || text.includes('chief')) { r.frame = 'leader'; frames.leader++; }
+    else { r.frame = 'other'; frames.other++; }
+
+    if (sentiment > 0.2) pos++;
+    else if (sentiment < -0.2) neg++;
+  }
+
+  const total = Math.max(results.length, 1);
+  const avgSentiment = results.reduce((s, r) => s + (r.sentiment ?? 0), 0) / total;
+  const totalFrames = Math.max(Object.values(frames).reduce((a, b) => a + b, 0), 1);
+
+  const keywords = [...new Set(
+    results.flatMap(r => (r.title + ' ' + r.snippet).toLowerCase()
+      .split(/\W+/).filter(w => w.length > 4 && !['about', 'their', 'which', 'there', 'these'].includes(w))
+    )
+  )].slice(0, 10);
+
+  const analysis: AnalysisResult = {
+    sentiment: {
+      positive: Math.round((pos / total) * 100),
+      neutral: Math.round(((total - pos - neg) / total) * 100),
+      negative: Math.round((neg / total) * 100),
+      average: Math.round(avgSentiment * 100) / 100,
+    },
+    frames: {
+      expert:  Math.round((frames.expert  / totalFrames) * 100),
+      founder: Math.round((frames.founder / totalFrames) * 100),
+      leader:  Math.round((frames.leader  / totalFrames) * 100),
+      family:  Math.round((frames.family  / totalFrames) * 100),
+      crisis:  Math.round((frames.crisis  / totalFrames) * 100),
+      other:   Math.round((frames.other   / totalFrames) * 100),
+    },
+    topKeywords: keywords,
+    archetypeHints: [],
+    crisisSignals: results.filter(r => r.frame === 'crisis').slice(0, 3).map(r => r.title),
+    summary: `Discovery scan complete for ${client.name}. Found ${results.length} mentions across ${new Set(results.map(r => r.source)).size} sources. Sentiment: ${Math.round((pos/total)*100)}% positive. (AI analysis skipped — results saved for manual review.)`,
+  };
+
+  const lsi = calculateLSI(results, client);
+  return { analysis, lsi };
+}
+
 async function runScan(
   runId: string,
   clientId: string,
@@ -174,21 +237,41 @@ async function runScan(
     }
   }
 
-  await updateProgress(admin, runId, 65, `${allResults.length} mentions found. Classifying sentiment & frames...`);
+  await updateProgress(admin, runId, 65, `${allResults.length} mentions found. Running AI analysis...`);
 
-  // ── PHASE 2: AI Analysis with heartbeat ────────────────────────────────────
-  // AI batches can take 20-40s — nudge progress every 4s so bar doesn't freeze
+  // ── PHASE 2: AI Analysis with hard timeout ─────────────────────────────────
+  // Cap results at 50 before AI to prevent 10+ sequential OpenRouter calls
+  // which can exceed Vercel's 300s function limit.
+  // Wrap entire AI phase in a 90s timeout — if it hangs, complete scan anyway.
+  const resultsForAI = allResults
+    .sort((a, b) => (b.relevanceScore ?? 0.5) - (a.relevanceScore ?? 0.5))
+    .slice(0, 50);
+
   let aiPct = 65;
   const aiHeartbeat = setInterval(() => {
     if (aiPct < 82) {
       aiPct += 3;
-      updateProgress(admin, runId, aiPct, `AI analysing ${allResults.length} mentions...`).catch(() => {});
+      updateProgress(admin, runId, aiPct, `AI analysing ${resultsForAI.length} top mentions...`).catch(() => {});
     }
   }, 4000);
 
   let enrichedResults: SourceResult[], analysis: AnalysisResult, lsi: LSIResult;
   try {
-    ({ enrichedResults, analysis, lsi } = await runFullAnalysis(allResults, client));
+    const aiTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AI analysis timeout')), 90_000)
+    );
+    ({ enrichedResults, analysis, lsi } = await Promise.race([
+      runFullAnalysis(resultsForAI, client),
+      aiTimeout,
+    ]));
+  } catch (aiErr) {
+    // AI timed out or failed — complete scan with raw results + basic stats
+    console.warn('[ReputeOS] AI analysis skipped:', (aiErr as Error).message);
+    clearInterval(aiHeartbeat);
+    const fallbackLsi = runFallbackAnalysis(allResults, client);
+    enrichedResults = allResults;
+    analysis = fallbackLsi.analysis;
+    lsi = fallbackLsi.lsi;
   } finally {
     clearInterval(aiHeartbeat);
   }
