@@ -40,7 +40,10 @@ async function openRouterChat(
 
   try {
     const body: Record<string, unknown> = { model: actualModel, messages, max_tokens: maxTokens };
-    if (OPENROUTER_API_KEY) body.provider = { order: ['amazon-bedrock', 'anthropic', 'openai', 'deepseek'], allow_fallbacks: true };
+    // provider field is OpenRouter-only — never send to api.openai.com
+    if (OPENROUTER_API_KEY) {
+      body.provider = { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true };
+    }
     if (jsonMode) body.response_format = { type: 'json_object' };
 
     const res = await fetch(`${baseUrl}/chat/completions`, {
@@ -49,7 +52,11 @@ async function openRouterChat(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn('[AI] openRouterChat error:', res.status, errText.slice(0, 200));
+      return null;
+    }
     const data = await res.json();
     return data.choices?.[0]?.message?.content ?? null;
   } catch {
@@ -406,71 +413,41 @@ Be specific, professional, and data-driven. No fluff.`,
   return { enrichedResults, analysis, lsi };
 }
 
+
 // ────────────────────────────────────────────────────────────────────────────
 // MASTER DISCOVERY REPORT GENERATOR
-// Produces a full SRE-grade narrative report using Claude 3.5 Sonnet
+// Uses unified AI caller — handles Anthropic / OpenRouter / OpenAI
 // ────────────────────────────────────────────────────────────────────────────
 import { buildDiscoveryReportPrompts, DiscoveryReport, DiscoveryReportInput } from './discovery-report-prompt';
 
 export async function generateDiscoveryReport(
   input: DiscoveryReportInput
 ): Promise<DiscoveryReport | null> {
-  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-  const OPENAI_API_KEY     = process.env.OPENAI_API_KEY;
-  const key = OPENROUTER_API_KEY ?? OPENAI_API_KEY;
-  if (!key) {
+  const hasKey = process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+  if (!hasKey) {
     console.warn('[ReputeOS] No AI key — skipping discovery report generation');
     return null;
   }
 
   const { systemPrompt, userPrompt } = buildDiscoveryReportPrompts(input);
-  const baseUrl = OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1';
-
-  // Use Claude 3.5 Sonnet — best narrative quality
-  const model = OPENROUTER_API_KEY ? 'anthropic/claude-3.5-sonnet' : 'gpt-4o';
-
-  const headers: Record<string, string> = OPENROUTER_API_KEY
-    ? { 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://reputeos.com', 'X-Title': 'ReputeOS' }
-    : { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' };
 
   try {
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model,
-        provider: OPENROUTER_API_KEY
-          ? { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true }
-          : undefined,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user',   content: userPrompt },
-        ],
-        max_tokens: 8000,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      }),
-      signal: AbortSignal.timeout(120_000),
+    const { callAI, parseAIJson } = await import('@/lib/ai/call');
+    const result = await callAI({
+      systemPrompt,
+      userPrompt,
+      json: true,
+      maxTokens: 6000,
+      temperature: 0.3,
+      timeoutMs: 90_000,
+      model: 'smart',
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('[ReputeOS] Discovery report API error:', res.status, errText.slice(0, 400));
-      // Try fallback model if primary fails
-      return null;
-    }
-
-    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-    const raw = data.choices?.[0]?.message?.content ?? '';
-    if (!raw) return null;
-
-    // Strip any accidental markdown fences
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
-    const report = JSON.parse(cleaned) as DiscoveryReport;
+    if (!result.content) return null;
+    const report = parseAIJson<DiscoveryReport>(result.content);
     report.generated_at = new Date().toISOString();
+    console.log('[ReputeOS] Discovery report generated via', result.provider, result.model);
     return report;
-
   } catch (e) {
     console.error('[ReputeOS] Discovery report generation failed:', e instanceof Error ? e.message : e);
     return null;

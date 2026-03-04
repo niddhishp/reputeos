@@ -289,34 +289,17 @@ Peers should be REAL named executives in the same industry (${ctx.industry}) as 
 Return ONLY the JSON object.`;
 
   async function callOpenRouter(prompt: string): Promise<unknown> {
-    const baseUrl = process.env.OPENROUTER_API_KEY
-      ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1';
-    const model = process.env.OPENROUTER_API_KEY
-      ? 'anthropic/claude-3.5-sonnet' : 'gpt-4o-mini';
-    const headers: Record<string,string> = process.env.OPENROUTER_API_KEY ? {
-      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://reputeos.com',
-    } : {
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    };
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST', headers,
-      body: JSON.stringify({
-        model,
-        ...(process.env.OPENROUTER_API_KEY ? { provider: { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true } } : {}), max_tokens: 3000, temperature: 0.4,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-      }),
-      signal: AbortSignal.timeout(45000),
+    const { callAI: _callAI, parseAIJson: _parseAIJson } = await import('@/lib/ai/call');
+    const result = await _callAI({
+      systemPrompt,
+      userPrompt: prompt,
+      json: true,
+      maxTokens: 3000,
+      temperature: 0.4,
+      timeoutMs: 50_000,
+      model: 'smart',
     });
-    if (!res.ok) throw new Error(`AI error: ${res.status}`);
-    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-    return JSON.parse(data.choices[0]?.message?.content ?? '{}');
+    return _parseAIJson(result.content);
   }
 
   // Run both prompts in parallel

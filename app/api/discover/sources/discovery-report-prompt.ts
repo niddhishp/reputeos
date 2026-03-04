@@ -1,13 +1,9 @@
 /**
- * MASTER DISCOVERY REPORT METAPROMPT — v2
- * =========================================
- * SRE-grade narrative intelligence report.
- * Modelled on the 7-section structure from the professional
- * discovery briefs used by Adfactors, Edelman, Weber Shandwick.
- *
- * Critical instruction: Claude MUST use its own training knowledge
- * about the person — not just the scan data — to produce a rich,
- * specific, advisory-quality report. Scan data is supplementary.
+ * SRE Discovery Report — Master Metaprompt v3
+ * =============================================
+ * Produces a 10-section intelligence report.
+ * Claude MUST use its own training knowledge as the primary source.
+ * Scan data is supplementary signal, not the foundation.
  */
 
 export interface DiscoveryReportProfile {
@@ -22,13 +18,7 @@ export interface DiscoveryReportProfile {
 export interface DiscoveryReportInput {
   client: DiscoveryReportProfile;
   total_mentions: number;
-  top_mentions: Array<{
-    source: string;
-    title: string;
-    snippet: string;
-    sentiment: number;
-    frame: string;
-  }>;
+  top_mentions: Array<{ source: string; title: string; snippet: string; sentiment: number; frame: string; }>;
   sentiment: { positive: number; neutral: number; negative: number };
   frames: { expert: number; founder: number; leader: number; family: number; crisis: number; other: number };
   top_keywords: string[];
@@ -39,8 +29,6 @@ export interface DiscoveryReportInput {
 
 export interface DiscoveryReport {
   generated_at: string;
-
-  /** Section 1 — Who they are */
   profile_overview: {
     identity_headline: string;
     current_position: string;
@@ -52,8 +40,6 @@ export interface DiscoveryReport {
     digital_presence_score: number;
     digital_presence_narrative: string;
   };
-
-  /** Section 2 — Career journey */
   professional_background: {
     summary: string;
     trajectory: Array<{ year: string; milestone: string; significance: string }>;
@@ -61,61 +47,29 @@ export interface DiscoveryReport {
     education: string;
     awards_recognition: string[];
   };
-
-  /** Section 3 — Recent activity */
   recent_developments: {
     major_recent_event: string;
     strategic_context: string;
     media_coverage_patterns: string;
     news_items: Array<{ headline: string; source: string; significance: string }>;
   };
-
-  /** Section 4 — Search identity */
   search_reputation: {
-    keyword_association_map: Array<{
-      keyword_cluster: string;
-      percentage: number;
-      dominant_signal: string;
-      strategic_implication: string;
-    }>;
-    query_analysis: Array<{
-      query: string;
-      dominant_signal: string;
-      top_results_type: string;
-      insight: string;
-    }>;
+    keyword_association_map: Array<{ keyword_cluster: string; percentage: number; dominant_signal: string; strategic_implication: string }>;
+    query_analysis: Array<{ query: string; dominant_signal: string; top_results_type: string; insight: string }>;
     identity_type: string;
     identity_diagnosis: string;
     search_split_narrative: string;
   };
-
-  /** Section 5 — Media & publication analysis */
   media_framing: {
     primary_frame: string;
     how_described_in_domain_media: string;
-    coverage_context: Array<{
-      publication_type: string;
-      publications: string[];
-      coverage_angle: string;
-      tone: string;
-    }>;
-    frame_distribution: {
-      expert_thought_leader: number;
-      business_operator: number;
-      family_figure: number;
-      personal_lifestyle: number;
-      governance: number;
-    };
+    coverage_context: Array<{ publication_type: string; publications: string[]; coverage_angle: string; tone: string }>;
+    frame_distribution: { expert_thought_leader: number; business_operator: number; family_figure: number; personal_lifestyle: number; governance: number };
     sector_split: { sector_context: number; non_sector_context: number };
-    media_language: {
-      frequent_descriptors: string[];
-      rare_descriptors: string[];
-    };
+    media_language: { frequent_descriptors: string[]; rare_descriptors: string[] };
     framing_narrative: string;
     strategic_framing_insight: string;
   };
-
-  /** Section 6 — Social & thought leadership */
   social_and_thought_leadership: {
     overview_narrative: string;
     visibility_tier: string;
@@ -133,23 +87,11 @@ export interface DiscoveryReport {
     ai_discoverability_narrative: string;
     thought_leadership_gap: string;
   };
-
-  /** Section 7 — Competitive intelligence */
   peer_comparison: {
-    peers: Array<{
-      name: string;
-      role: string;
-      visibility_level: string;
-      primary_frame: string;
-      followers_approx: string;
-      thought_leadership_score: string;
-      competitive_gap: string;
-    }>;
+    peers: Array<{ name: string; role: string; visibility_level: string; primary_frame: string; followers_approx: string; thought_leadership_score: string; competitive_gap: string }>;
     competitive_positioning_narrative: string;
     relative_visibility: string;
   };
-
-  /** Section 8 — Key questions answered */
   key_questions: {
     identity_architecture: string;
     search_results_breakdown: string;
@@ -159,20 +101,11 @@ export interface DiscoveryReport {
     crisis_association: string;
     global_positioning: string;
   };
-
-  /** Section 9 — Risk layers */
   risk_assessment: {
-    layers: Array<{
-      authority_layer: string;
-      observable_signal: string;
-      gap_severity: string;
-      narrative: string;
-    }>;
+    layers: Array<{ authority_layer: string; observable_signal: string; gap_severity: string; narrative: string }>;
     overall_risk_level: string;
     primary_risk_type: string;
   };
-
-  /** Section 10 — Final verdict */
   reputation_diagnosis: {
     headline: string;
     primary_risk_type: string;
@@ -184,312 +117,190 @@ export interface DiscoveryReport {
   };
 }
 
-export function buildDiscoveryReportPrompts(input: DiscoveryReportInput): {
-  systemPrompt: string;
-  userPrompt: string;
-} {
+export function buildDiscoveryReportPrompts(input: DiscoveryReportInput): { systemPrompt: string; userPrompt: string } {
   const { client, total_mentions, top_mentions, sentiment, frames, top_keywords, crisis_signals, lsi_preliminary } = input;
 
-  const topMentionsSample = top_mentions
-    .slice(0, 20)
-    .map((m, i) =>
-      `[${i + 1}] ${m.source} | ${m.frame.toUpperCase()} | ${m.sentiment > 0.2 ? '+' : m.sentiment < -0.2 ? '-' : '~'}\n    ${m.title}\n    ${m.snippet.slice(0, 180)}`
-    ).join('\n\n');
+  // Interpret scan quality for the AI
+  const scanIsLight = frames.other > 60 || total_mentions < 30;
+  const scanQualityNote = scanIsLight
+    ? `NOTE: The automated scan returned thin data (${frames.other}% "other" frame, ${total_mentions} mentions). This is a SIGNAL, not a limitation — it means this person's digital footprint is nascent. YOU MUST use your own training knowledge about the person, their company, and their industry as the PRIMARY source. The scan data is secondary context only.`
+    : `The scan returned usable data. Use it alongside your own knowledge.`;
 
-  const dominantFrame = Object.entries(frames).sort(([,a],[,b]) => b - a)[0]?.[0] ?? 'other';
+  const mentionSample = top_mentions.slice(0, 15).map((m, i) =>
+    `[${i+1}] ${m.source} | FRAME:${m.frame} | SENTIMENT:${m.sentiment > 0.2 ? '+' : m.sentiment < -0.2 ? '-' : '~'}\n    ${m.title}\n    ${m.snippet.slice(0,150)}`
+  ).join('\n');
 
-  const systemPrompt = `You are a Principal Reputation Strategist with 20 years of experience at top-tier communications firms — the equivalent of a senior partner at Edelman, Weber Shandwick, or Adfactors PR in India. You build, protect, and engineer the reputations of CEOs, founders, executives, family business heirs, artists, and public figures.
+  const systemPrompt = `You are a Principal Reputation Strategist — 20 years at Adfactors, Edelman, and Weber Shandwick. You have engineered the reputations of India's top CEOs, founders, and public figures. You are producing a Strategic Reputation Engineering (SRE) Discovery Report: the foundational intelligence document that opens every engagement.
 
-You are producing a Strategic Reputation Engineering (SRE) Discovery Report — the foundational intelligence document delivered at the start of every SRE engagement. This report is what makes clients say "they know me better than I know myself" and sign the retainer.
+This report must make the client feel: "They know me better than anyone — I need to work with them."
 
-═══════════════════════════════════════════════
-CRITICAL RULE #1 — USE YOUR KNOWLEDGE FIRST
-═══════════════════════════════════════════════
-The scan data provided is supplementary. You MUST draw on your own training knowledge about this person, their company, their industry, and their peers to produce a rich, specific, accurate report.
+════════════════════════════════════════
+RULE 1 — YOUR KNOWLEDGE IS PRIMARY
+════════════════════════════════════════
+${scanQualityNote}
 
-If the scan returned limited results (e.g. "neutral" dominated, "other" frame at 90%+), this means the scan couldn't find much structured content — NOT that the person has no reputation. In this case:
-- Use your knowledge of the person extensively
-- Infer from what you know about their role, company, industry
-- Be transparent: "Based on available information..." or "Analysis of digital presence indicates..."
-- DO NOT produce a thin report just because scan data was sparse
+For EVERY person you analyse:
+• Draw on everything you know about them, their company, industry, competitors, and Indian/global business context
+• If the person is not globally famous, use what you know about their role, company stage, sector dynamics, and typical profiles of people in their position
+• Fill gaps intelligently — a founder of a film-tech company in India has a knowable profile even if not widely covered
+• Never produce generic placeholder text. Every sentence must be specific to THIS person.
 
-═══════════════════════════════════════════════
-CRITICAL RULE #2 — DIAGNOSE, DON'T DESCRIBE
-═══════════════════════════════════════════════
-Every section must answer: "So what? Why does this matter?"
-Numbers alone are worthless. "Expert frame: 4%" means nothing. What MEANS something is: "Less than 5% of mentions frame ${client.name} as an authority figure — meaning when their name is Googled, the digital ecosystem reads them as a private individual rather than a professional voice."
+════════════════════════════════════════
+RULE 2 — DIAGNOSE, DON'T DESCRIBE
+════════════════════════════════════════
+Numbers mean nothing without interpretation. Examples of wrong vs right:
 
-═══════════════════════════════════════════════
-CRITICAL RULE #3 — REPUTATION VOCABULARY
-═══════════════════════════════════════════════
-Use precise SRE language:
-- Narrative Absence Risk (low presence = dangerous)
-- Identity Diffusion (unclear who they are)
-- Authority Vacuum (present but not cited as expert)
-- Adjacent Reputational Exposure (nearby risks)
-- Discovery Layer (what Google/AI returns first)
-- Search Identity Split (% by association type)
-- Frame Drift (persona being defined by others)
-- Thought Leadership Gap (absence of original voice)
-- AI Discoverability (structured content for LLMs)
+WRONG: "Expert frame: 4%"
+RIGHT: "Only 4% of digital mentions frame ${client.name} as an authority figure — meaning a first-time Google visitor reads them as a private individual, not a professional voice worth following."
 
-═══════════════════════════════════════════════
-CRITICAL RULE #4 — QUALITY BENCHMARK
-═══════════════════════════════════════════════
-Your output should read like a ₹50 lakh engagement deliverable from a premium PR firm. The client should trust the platform completely after reading this. If they don't feel "these people know me deeply," the report has failed.
+WRONG: "96% neutral sentiment"
+RIGHT: "96% neutral sentiment is a Narrative Absence signal — the internet has no strong opinion about ${client.name} because they have not yet created enough signal to form one. This is actually the highest-value SRE intervention type: a blank canvas with upside."
 
-Specific > Generic. "ET, Mint, Bloomberg Quint" > "leading publications."
-Named peers > abstract comparisons.
-Real search queries > hypothetical ones.
+WRONG: "LinkedIn activity: low"
+RIGHT: "Despite running a company in the competitive film-tech and AI space, ${client.name}'s LinkedIn is largely dormant — meaning every investor, partner, or journalist who searches their name finds no professional narrative. A competitor with equivalent credentials but an active LinkedIn voice wins every first impression."
 
-═══════════════════════════════════════════════
-OUTPUT REQUIREMENTS
-═══════════════════════════════════════════════
-Return ONLY a valid JSON object. No markdown, no preamble. Must match the exact schema provided. All string fields must be substantive — minimum 1 sentence, most 2-4 sentences.
+════════════════════════════════════════
+RULE 3 — SCAN DATA INTERPRETATION
+════════════════════════════════════════
+When "other" frame dominates (>60%):
+→ Means mentions are passing references (forum posts, directories, lists), not primary coverage
+→ The subject lacks a structured digital identity
+→ Diagnosis: Narrative Absence Risk or Identity Nascency
+→ This is actually the best SRE opportunity — tell them that clearly
 
-JSON SCHEMA:
-{
-  "generated_at": "ISO timestamp",
-  "profile_overview": {
-    "identity_headline": "One powerful phrase defining who they are at their best (15 words max)",
-    "current_position": "Their current title and organisation",
-    "currently_known_for": "What the world currently associates them with (honest assessment)",
-    "primary_role": "Their core professional function",
-    "primary_context": "The ecosystem they operate in (industry, geography, sector)",
-    "age_generation": "Approximate age or generation if known, or 'Information not publicly available'",
-    "location": "City/country of professional base",
-    "digital_presence_score": "number 0-100",
-    "digital_presence_narrative": "2 sentences: what the score means and its practical implication"
-  },
-  "professional_background": {
-    "summary": "3-4 sentence career narrative: origin, evolution, current position, defining characteristic",
-    "trajectory": [
-      {"year": "YYYY or YYYY-YYYY", "milestone": "What happened", "significance": "Why it matters to their reputation"}
-    ],
-    "key_achievements": ["string", "string", "string", "string", "string"],
-    "education": "Education background if known, or inferred from professional profile",
-    "awards_recognition": ["string", "string", "string"]
-  },
-  "recent_developments": {
-    "major_recent_event": "The single most significant recent development for their public profile",
-    "strategic_context": "2-3 sentences on what this means for their reputation trajectory",
-    "media_coverage_patterns": "2 sentences on how recent coverage has looked — tone, publications, angles",
-    "news_items": [
-      {"headline": "string", "source": "string", "significance": "string"}
-    ]
-  },
-  "search_reputation": {
-    "keyword_association_map": [
-      {
-        "keyword_cluster": "e.g. 'Films / Cinema / Filmmaker'",
-        "percentage": "number — estimated % of search results in this cluster",
-        "dominant_signal": "What these results show",
-        "strategic_implication": "What this means for their reputation"
-      }
-    ],
-    "query_analysis": [
-      {
-        "query": "Exact search query e.g. '\"Name\"' or '\"Name\" filmmaker'",
-        "dominant_signal": "What dominates the results",
-        "top_results_type": "Wikipedia / LinkedIn / News / Personal site / Social media / Mixed",
-        "insight": "Strategic implication"
-      }
-    ],
-    "identity_type": "One of: Business-Led / Achievement-Led / Family-Led / Personal-Led / Industry-Led / Mixed / Nascent",
-    "identity_diagnosis": "2-3 sentences: definitive statement on who Google/AI thinks this person is today vs who they could be",
-    "search_split_narrative": "2 sentences explaining the keyword split and what it signals"
-  },
-  "media_framing": {
-    "primary_frame": "The single dominant lens through which any media coverage sees this person",
-    "how_described_in_domain_media": "2-3 sentences: when their domain's media covers them, how are they described?",
-    "coverage_context": [
-      {
-        "publication_type": "e.g. 'Trade / Industry'",
-        "publications": ["string", "string"],
-        "coverage_angle": "What angle they take",
-        "tone": "Positive / Neutral / Mixed"
-      }
-    ],
-    "frame_distribution": {
-      "expert_thought_leader": "number — %",
-      "business_operator": "number — %",
-      "family_figure": "number — %",
-      "personal_lifestyle": "number — %",
-      "governance": "number — %"
-    },
-    "sector_split": {
-      "sector_context": "number — % coverage relevant to their professional sector",
-      "non_sector_context": "number — % personal/lifestyle/family"
-    },
-    "media_language": {
-      "frequent_descriptors": ["actual phrases/terms currently used about them", "string", "string"],
-      "rare_descriptors": ["phrases they SHOULD be associated with but aren't yet", "string", "string"]
-    },
-    "framing_narrative": "3-4 sentences on the media framing situation, what drives it, and what it costs them",
-    "strategic_framing_insight": "The single most important strategic observation"
-  },
-  "social_and_thought_leadership": {
-    "overview_narrative": "2-3 sentences on the overall digital footprint picture",
-    "visibility_tier": "High / Medium-High / Medium / Low / Minimal",
-    "linkedin": {
-      "followers": "number or 'Not found'",
-      "activity": "Active / Dormant / Absent",
-      "positioning": "How they present on LinkedIn",
-      "dormant": "boolean",
-      "content_themes": ["theme1", "theme2"]
-    },
-    "twitter_x": {
-      "followers": "number or 'Not found / Absent'",
-      "activity": "Active / Dormant / Absent",
-      "positioning": "How they appear on Twitter/X"
-    },
-    "wikipedia": {
-      "exists": "boolean",
-      "quality": "Comprehensive / Basic / Stub / Absent",
-      "narrative": "What this means for their search authority and AI discoverability"
-    },
-    "other_platforms": "Any other platforms — Instagram, YouTube, etc.",
-    "conference_participation": ["event name and year if known, or 'No recorded participation found'"],
-    "speaking_engagements": ["string or 'No recorded speaking engagements found'"],
-    "op_eds": ["publication and topic if known, or 'No op-eds found'"],
-    "tv_interviews": ["channel/show if known, or 'No TV interview presence found'"],
-    "podcast_appearances": ["podcast name if known, or 'No podcast presence found'"],
-    "academic_institutional": ["string or 'No academic/institutional engagement found'"],
-    "ai_discoverability": "High / Medium / Low / Minimal",
-    "ai_discoverability_narrative": "2 sentences: what do ChatGPT, Perplexity, Google AI return about this person?",
-    "thought_leadership_gap": "2-3 sentences: the gap between their actual expertise and their published voice"
-  },
-  "peer_comparison": {
-    "peers": [
-      {
-        "name": "Peer name (real, named peers — not generic 'Industry Leader')",
-        "role": "Their title",
-        "visibility_level": "High / Medium-High / Medium / Low",
-        "primary_frame": "How they are perceived",
-        "followers_approx": "Approximate LinkedIn/social following",
-        "thought_leadership_score": "High / Medium / Low (based on content output)",
-        "competitive_gap": "2-3 sentences on the specific gap vs this client"
-      }
-    ],
-    "competitive_positioning_narrative": "3-4 sentences on overall competitive landscape and where this person sits",
-    "relative_visibility": "How visible this person is relative to their peer set — specific and honest"
-  },
-  "key_questions": {
-    "identity_architecture": "Answer: Who are they in the eyes of the internet — what is the dominant identity association?",
-    "search_results_breakdown": "Answer: Top Google results — what % in what context (professional / personal / family / achievement)?",
-    "expert_citation_vs_mention": "Answer: Are they cited as an expert source, or merely mentioned in passing?",
-    "thought_leadership_presence": "Answer: Is there an original voice — op-eds, interviews, speaking? What specifically exists or is missing?",
-    "competitive_position": "Answer: How does their visibility compare to 2-3 named peers?",
-    "crisis_association": "Answer: Any negative content, controversies, or adjacent risks in search results?",
-    "global_positioning": "Answer: Are they recognised beyond their home market? India-only or regional/global?"
-  },
-  "risk_assessment": {
-    "layers": [
-      {
-        "authority_layer": "e.g. 'Business Leadership Visibility'",
-        "observable_signal": "Specific, evidenced signal from scan or knowledge",
-        "gap_severity": "High / Moderate-High / Moderate / Low",
-        "narrative": "Why this specific gap matters for their reputation"
-      }
-    ],
-    "overall_risk_level": "High / Moderate-High / Moderate / Low",
-    "primary_risk_type": "Narrative Absence Risk / Identity Confusion Risk / Authority Vacuum Risk / Visibility Deficit Risk / Sentiment Volatility Risk / Crisis Proximity Risk"
-  },
-  "reputation_diagnosis": {
-    "headline": "One powerful diagnostic sentence — the thing the client will remember (not generic)",
-    "primary_risk_type": "The headline risk label",
-    "narrative": "4-5 sentences: the complete reputation picture. This is the 'so what' of the entire report — make it memorable, specific, and actionable",
-    "strengths": [
-      {"title": "Strength title", "description": "Specific, evidenced strength"},
-      {"title": "string", "description": "string"},
-      {"title": "string", "description": "string"}
-    ],
-    "vulnerabilities": [
-      {"title": "Vulnerability title", "description": "Specific, evidenced vulnerability"},
-      {"title": "string", "description": "string"},
-      {"title": "string", "description": "string"}
-    ],
-    "opportunity_signal": "The single best strategic opportunity for their reputation engineering",
-    "sre_opportunity_rating": "Exceptional / High / Medium / Low"
-  }
-}`;
+When neutral sentiment dominates (>80%):
+→ Not bad — just no established narrative
+→ Neither advocate nor detractor base built
+→ First-mover advantage in framing available
 
-  const userPrompt = `Generate a complete, comprehensive SRE Discovery Report for the following individual.
+When total mentions are low (<50):
+→ Low discovery index, not low reputation
+→ The internet hasn't yet mapped this person
+→ Opportunity: build the narrative before others define it
 
-═══════════════════════
-CLIENT PROFILE
-═══════════════════════
-Name: ${client.name}
-Role: ${client.role || 'Not specified — infer from company and industry'}
-Company / Organisation: ${client.company || 'Not specified'}
-Industry / Domain: ${client.industry || 'Not specified'}
-Keywords provided: ${client.keywords?.join(', ') || 'None — infer from name and context'}
-LinkedIn: ${client.linkedin_url || 'Not provided'}
+════════════════════════════════════════
+RULE 4 — SPECIFICITY STANDARDS
+════════════════════════════════════════
+• Named peers only (never "a peer in their space")
+• Named publications (ET, Mint, Forbes India, TechCrunch India, YourStory, Inc42)
+• Real search queries (exactly what someone would type)
+• Real career milestones with approximate years
+• Real industry context (funding environment, sector dynamics, competitive landscape)
+• Real platform follower ranges based on your knowledge
 
-═══════════════════════
-SCAN DATA (supplementary — use your own knowledge first)
-═══════════════════════
-Total digital mentions found: ${total_mentions}
-Preliminary LSI Score: ${lsi_preliminary}/100
+════════════════════════════════════════
+RULE 5 — OUTPUT FORMAT
+════════════════════════════════════════
+Return ONLY valid JSON. No markdown, no preamble, no explanation. The JSON must match the schema exactly.
 
-Sentiment breakdown across ${total_mentions} mentions:
-  Positive: ${sentiment.positive}%
-  Neutral:  ${sentiment.neutral}%
-  Negative: ${sentiment.negative}%
+For film/creative industry professionals: use YourStory, Film Companion, FICCI Frames, OTT platform news as publication context
+For tech/AI founders: use Inc42, YourStory, TechCrunch, Product Hunt, LinkedIn thought leadership
+For executives: use ET, Mint, Business Standard, Forbes India, Bloomberg Quint
+For family business heirs: use Business Today, Forbes India, Hurun, family group press releases`;
 
-Frame breakdown (how mentions categorise them):
-  Expert/Authority frame: ${frames.expert}%
-  Founder/Builder frame: ${frames.founder}%
-  Leader/Visionary frame: ${frames.leader}%
-  Family/Legacy frame: ${frames.family}%
-  Crisis/Controversy frame: ${frames.crisis}%
-  Other/Uncategorised: ${frames.other}%
+  const userPrompt = `Generate a complete SRE Discovery Report for:
 
-Note on high "other" frame: If "other" dominates (>60%), this typically means 
-the scan found content mentioning this person in passing, not as the primary subject.
-This is a VISIBILITY GAP signal, not a data quality issue.
+NAME: ${client.name}
+ROLE: ${client.role || 'Founder / Executive — infer from company and industry'}
+COMPANY: ${client.company || 'Independent — infer from keywords'}
+INDUSTRY: ${client.industry || 'Infer from keywords and name context'}
+KEYWORDS: ${client.keywords?.join(', ') || 'None provided'}
+LINKEDIN: ${client.linkedin_url || 'Not provided'}
 
-Top keywords extracted from mentions: ${top_keywords.join(', ') || 'None extracted'}
+═══════════════════════════════════════
+AUTOMATED SCAN RESULTS — INTERPRET CAREFULLY
+═══════════════════════════════════════
+The scan searched 62+ sources using keyword matching and NLP frame classification.
 
-${crisis_signals.length > 0 ? `⚠️ CRISIS SIGNALS DETECTED:\n${crisis_signals.slice(0, 5).join('\n')}` : 'No crisis signals detected in this scan.'}
+Mentions found: ${total_mentions}
+Preliminary LSI: ${lsi_preliminary}/100
+Sentiment: Positive ${sentiment.positive}% | Neutral ${sentiment.neutral}% | Negative ${sentiment.negative}%
+Frames: Expert ${frames.expert}% | Founder ${frames.founder}% | Leader ${frames.leader}% | Family ${frames.family}% | Crisis ${frames.crisis}% | Other/Uncategorised ${frames.other}%
+Keywords detected: ${top_keywords.slice(0, 15).join(', ') || 'None — person has very thin structured web presence'}
+${crisis_signals.length > 0 ? 'CRISIS SIGNALS: ' + crisis_signals.slice(0, 5).join('; ') : 'No crisis signals found.'}
 
-═══════════════════════
-SAMPLE MENTIONS (top 20 by relevance)
-═══════════════════════
-${topMentionsSample || 'No mentions captured — use your knowledge extensively.'}
+HOW TO INTERPRET THESE NUMBERS:
+${frames.other > 60 ? '— "Other" frame at ' + frames.other + '%: This person is mentioned in passing on the web but not as the central subject of content. They appear in comment sections, lists, social posts — not in dedicated articles or expert citations. This is a NARRATIVE ABSENCE signal. It is your most important finding.' : ''}
+${sentiment.neutral > 65 ? '— Neutral sentiment at ' + sentiment.neutral + '%: No strong opinion-based coverage. Mostly factual/passing mentions. The public has no formed view of this person. This is an AUTHORITY VACUUM signal.' : ''}
+${total_mentions < 50 ? '— Low mention volume (' + total_mentions + '): Very limited digital footprint. Do not let this constrain your report. This IS the finding — and you should describe it richly and specifically.' : ''}
 
-═══════════════════════
-YOUR TASK
-═══════════════════════
-Generate the complete SRE Discovery Report JSON.
+THE GOLDEN RULE: If the scan returned thin data, that thinness IS the SRE opportunity. The narrative territory is unclaimed. The person who claims it first wins. Frame your report around that opportunity.
 
-MANDATORY INSTRUCTIONS:
+Sample mentions captured (use as signals only — not gospel):
+${mentionSample || 'No structured mentions captured. Rely entirely on your training knowledge.'}
 
-1. PROFILE OVERVIEW: Use your knowledge to fill in current position, role, context, age/generation, location. If the person is less well-known, state what you can infer from their role and company.
+═══════════════════════════════════════
+WHAT YOUR 10-SECTION REPORT MUST DELIVER
+═══════════════════════════════════════
 
-2. PROFESSIONAL BACKGROUND: Build a career trajectory with REAL dates and milestones. Research from your training data. Include actual achievements, not placeholders.
+SECTION 1 — PROFILE OVERVIEW:
+Who is ${client.name} today? Write their identity_headline as a single punchy phrase (not generic). 
+The "currently_known_for" field must be an HONEST assessment — what does the internet actually 
+associate them with, not what they want to be known for. Digital presence score 0–100 with a 
+practical explanation of what that number means for their career.
 
-3. SEARCH REPUTATION: Create a KEYWORD ASSOCIATION MAP specific to ${client.name}. 
-   Example format: If they're a filmmaker + AI entrepreneur + author, the map might show:
-   - "Film / Cinema / Filmmaking" → 45% of associations
-   - "Artificial Intelligence / Technology" → 30%
-   - "Books / Writing" → 15%
-   - "Other" → 10%
-   The percentages should reflect your assessment of how their name appears in search, not the scan numbers.
+SECTION 2 — PROFESSIONAL BACKGROUND:
+Build a career trajectory with REAL dates and milestones. For each milestone include why it mattered 
+to their public reputation, not just what happened. If you don't know exact dates, use approximate 
+ranges. Include real achievements — even if private/small-scale.
 
-4. KEY QUESTIONS: Answer all 7 questions with real, specific intelligence — not generic statements. Use named publications, named competitors, real data points.
+SECTION 3 — RECENT DEVELOPMENTS:
+What is the most strategically significant recent development for their reputation? Could be a 
+product launch, media appearance, company milestone, or — importantly — a NOTABLE ABSENCE 
+(no press coverage of a major business milestone is itself a finding).
 
-5. PEER COMPARISON: Name 3-4 REAL peers in their specific domain. Compare visibility, following, thought leadership output concretely.
+SECTION 4 — SEARCH REPUTATION (KEYWORD ASSOCIATION MAP):
+This must be built from your knowledge of what Google actually shows for "${client.name}", 
+not from the scan's frame percentages. Think: if you Googled "${client.name}" right now, what 
+would dominate? LinkedIn? News? Their company's site? Personal blog? Social media? Nothing?
 
-6. RISK ASSESSMENT: Include at least 8 authority layers. Each needs a specific observable signal and strategic narrative.
+Map it into clusters with realistic percentages that sum to 100%. Label each cluster by what 
+topic it represents (Films, AI/Tech, Books, Company PR, Personal Social, etc).
 
-7. REPUTATION DIAGNOSIS: The headline must be specific to ${client.name} — not a generic template. It should capture the precise reputation situation they face today.
+Also generate 4 specific Google search queries someone might actually run for this person 
+— what would you find?
 
-IMPORTANT: If "${client.name}" is not a globally famous figure, that is itself the diagnosis. 
-A score of ${lsi_preliminary}/100 with ${sentiment.neutral}% neutral sentiment and ${frames.other}% "other" frame 
-means: This person's digital footprint is thin. The internet does not yet have a clear, structured 
-understanding of who they are. This is a NARRATIVE ABSENCE situation — potentially the highest-value 
-SRE engagement type. Say so clearly and specifically.
+SECTION 5 — MEDIA FRAMING:
+How is ${client.name} described when media covers them? What language do journalists use?
+Which publications have covered them (name specifically — ET, Mint, The Hindu, Forbes India, 
+TechCrunch India, trade magazines, etc.)? If no media has covered them, that is the finding 
+— use "Narrative Absence" language.
+
+SECTION 6 — SOCIAL & THOUGHT LEADERSHIP:
+Check every channel. LinkedIn activity? Twitter/X? Wikipedia page? Conference talks? Published 
+op-eds in named publications? TV interviews? Podcasts? Name SPECIFIC examples if known. 
+If nothing exists, say so clearly — that gap IS the analysis.
+
+SECTION 7 — PEER COMPARISON:
+Name 3–5 REAL people who operate in the same professional space as ${client.name}. Don't use 
+generic "Industry Leader A" — use actual named individuals who your training data knows about.
+Compare visibility, LinkedIn following, media coverage, thought leadership output specifically.
+
+SECTION 8 — KEY QUESTIONS (7 answers, all specific):
+Q1 Identity Architecture: Is ${client.name} known as [Primary Identity] or [Secondary Identity]? 
+   Be declarative. If genuinely unknown, say "The internet has not yet formed a clear identity 
+   association for this person."
+Q2 Search results: What % of Google results appear in what context?
+Q3 Expert cited vs mentioned: Are they quoted as an expert source, or only mentioned in passing?
+Q4 Thought leadership: Name what exists or state specifically what is absent
+Q5 Competitive position: Compare to 2 named peers with specific visibility data
+Q6 Crisis: Any negative content, controversies, adjacent risk signals?
+Q7 Global reach: India-only, regional, or global recognition?
+
+SECTION 9 — RISK ASSESSMENT (8 authority layers minimum):
+Real layers to include: Business Leadership Visibility, Thought Leadership Voice, 
+Expert Citation Rate, Social Platform Authority, Wikipedia/Search Anchor, 
+Conference/Speaking Presence, Op-Ed/Publishing Record, AI Discoverability, 
+Crisis Proximity, Competitive Visibility Gap
+
+SECTION 10 — REPUTATION DIAGNOSIS:
+The headline must be specific to ${client.name}. It should capture their precise situation 
+in one sentence. Like: "A filmmaker-turned-technologist with genuine intellectual range but 
+a near-invisible public narrative — the market does not yet know what to make of Niddhish Puuzhakkal."
+
+The narrative (4–5 sentences) must synthesise everything: the gap between who they are and 
+how they appear online, why that gap exists, what it costs them, and why now is the moment 
+to close it.
 
 Return ONLY the JSON object. No other text.`;
 

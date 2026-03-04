@@ -17,7 +17,7 @@ import { fetchFinancialSources } from '../sources/financial';
 import { fetchRegulatorySources } from '../sources/regulatory';
 import { fetchAcademicSources } from '../sources/academic';
 import { fetchVideoSources } from '../sources/video';
-import { runFullAnalysis, calculateLSI, generateDiscoveryReport } from '../sources/ai-analysis';
+import { runFullAnalysis, calculateLSI } from '../sources/ai-analysis';
 
 const Schema = z.object({ clientId: z.string().uuid() });
 
@@ -287,46 +287,10 @@ async function runScan(
     return true;
   });
 
-  // ── PHASE 3: Generate rich narrative discovery report ─────────────────────
-  // Now dedupedResults is ready — safe to use for report generation
-  await updateProgress(admin, runId, 88, 'Building narrative discovery report...');
-  let discoveryReport = null;
-  try {
-    const topMentionsSample = dedupedResults
-      .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0))
-      .slice(0, 25)
-      .map(r => ({
-        source: r.source,
-        title: r.title,
-        snippet: r.snippet.slice(0, 300),
-        sentiment: r.sentiment ?? 0,
-        frame: r.frame ?? 'other',
-      }));
-
-    discoveryReport = await generateDiscoveryReport({
-      client: {
-        name: client.name,
-        role: client.role || '',
-        company: client.company || '',
-        industry: client.industry || '',
-        keywords: client.keywords || [],
-        linkedin_url: client.linkedin_url ?? undefined,
-      },
-      total_mentions: dedupedResults.length,
-      top_mentions: topMentionsSample,
-      sentiment: analysis.sentiment,
-      frames: analysis.frames,
-      top_keywords: analysis.topKeywords,
-      crisis_signals: analysis.crisisSignals,
-      archetype_hints: analysis.archetypeHints,
-      lsi_preliminary: lsi.total,
-    });
-    if (discoveryReport) {
-      console.log(`✅ Discovery report generated for ${client.name}`);
-    }
-  } catch (repErr) {
-    console.warn('[ReputeOS] Discovery report generation failed:', repErr instanceof Error ? repErr.message : repErr);
-  }
+  // ── PHASE 3: Discovery report generated separately via /api/discover/report ─
+  // The report is NOT generated here — it runs in its own Vercel function (120s budget)
+  // The discover page automatically triggers it after scan completes.
+  const discoveryReport = null;
 
   await updateProgress(admin, runId, 92, 'Saving results...');
 

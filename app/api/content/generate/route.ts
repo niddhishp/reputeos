@@ -132,54 +132,23 @@ UNIQUENESS GUARDRAILS: ${((template as Record<string, unknown>).uniqueness_guard
 Write ONLY the content. No preamble. No "Here is your article:". No meta-commentary.`;
 
   // ── Generate ──────────────────────────────────────────────────────────────
-  const openrouterKey = process.env.OPENROUTER_API_KEY;
-  const openaiKey     = process.env.OPENAI_API_KEY;
-
-  if (!openrouterKey && !openaiKey) {
+  if (!process.env.OPENROUTER_API_KEY && !process.env.OPENAI_API_KEY) {
     return Response.json({ error: 'No AI API key configured', message: 'Add OPENROUTER_API_KEY or OPENAI_API_KEY to environment variables.' }, { status: 503 });
   }
-
-  const endpoint = openrouterKey
-    ? 'https://openrouter.ai/api/v1/chat/completions'
-    : 'https://api.openai.com/v1/chat/completions';
-
-  // Claude Sonnet for long-form, GPT-4o-mini for short posts
-  const model = openrouterKey
-    ? (platform === 'linkedin_short' || platform === 'twitter_thread'
-      ? 'anthropic/claude-3-haiku'
-      : 'anthropic/claude-3.5-sonnet')
-    : 'gpt-4o';
 
   const maxTokens = platform === 'whitepaper' ? 3500 : platform === 'twitter_thread' ? 1200 : 2000;
 
   try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openrouterKey ?? openaiKey}`,
-        'Content-Type': 'application/json',
-        ...(openrouterKey ? { 'HTTP-Referer': 'https://reputeos.com', 'X-Title': 'ReputeOS' } : {}),
-      },
-      body: JSON.stringify({
-        model,
-        ...(openrouterKey ? { provider: { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true } } : {}),
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user',   content: `Write a ${spec.label} about: ${topic}` },
-        ],
-        temperature: voiceTone === 'provocative' ? 0.85 : voiceTone === 'analytical' ? 0.5 : 0.7,
-        max_tokens: maxTokens,
-      }),
-      signal: AbortSignal.timeout(90000),
+    const { callAI } = await import('@/lib/ai/call');
+    const aiResult = await callAI({
+      systemPrompt,
+      userPrompt: `Write a ${spec.label} about: ${topic}`,
+      maxTokens,
+      temperature: voiceTone === 'provocative' ? 0.85 : voiceTone === 'analytical' ? 0.5 : 0.7,
+      json: false,
+      timeoutMs: 90_000,
     });
-
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`AI API error ${res.status}: ${err.slice(0, 200)}`);
-    }
-
-    const data  = await res.json();
-    const content = data.choices?.[0]?.message?.content ?? '';
+    const content = aiResult.content;
     if (!content) throw new Error('AI returned empty content');
 
     // ── Word count ────────────────────────────────────────────────────────
@@ -214,7 +183,7 @@ Write ONLY the content. No preamble. No "Here is your article:". No meta-comment
       platform,
       spec:       { label: spec.label, wordCount: spec.wordCount },
       compliance,
-      modelUsed:  model,
+      modelUsed:  aiResult.model,
     });
 
   } catch (err) {

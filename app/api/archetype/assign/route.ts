@@ -6,6 +6,7 @@
  */
 
 import { createClient, createAdminClient, verifyClientOwnership } from '@/lib/supabase/server';
+import { callAI, parseAIJson } from '@/lib/ai/call';
 import { z } from 'zod';
 
 const Schema = z.object({ clientId: z.string().uuid() });
@@ -45,24 +46,24 @@ export async function POST(request: Request): Promise<Response> {
     .maybeSingle();
 
   try {
-    const result = await assignArchetypes({ client, discoverRun, lsiRun });
+    const result = await assignArchetypes({ client, discoverRun, lsiRun }) as Record<string, unknown>;
 
     // Save positioning record
     const admin = createAdminClient();
     await admin.from('positioning').upsert({
       client_id: clientId,
-      mode: result.personalArchetype?.id && result.businessArchetype?.id ? 'personal_and_business' : 'personal_only',
-      personal_archetype: result.personalArchetype?.name ?? result.personalArchetype?.id ?? 'Unknown',
-      business_archetype: result.businessArchetype?.name ?? result.businessArchetype?.id ?? null,
-      archetype_confidence: result.confidence ?? 75,
-      followability_score: result.followabilityScore ?? 70,
-      followability_factors: result.followabilityFactors ?? {},
-      positioning_statement: result.positioningStatement ?? '',
-      content_pillars: result.contentPillars ?? [],
-      signature_lines: result.signatureLines ?? [],
-      target_influencers: result.targetInfluencers ?? [],
-      root_cause_insights: result.rootCauseInsights ?? [],
-      strategic_insights: result.strategicInsights ?? [],
+      mode: (result.personalArchetype as Record<string,unknown>)?.id && (result.businessArchetype as Record<string,unknown>)?.id ? 'personal_and_business' : 'personal_only',
+      personal_archetype: (result.personalArchetype as Record<string,string>)?.name ?? (result.personalArchetype as Record<string,string>)?.id ?? 'Unknown',
+      business_archetype: (result.businessArchetype as Record<string,string>)?.name ?? (result.businessArchetype as Record<string,string>)?.id ?? null,
+      archetype_confidence: (result.confidence as number) ?? 75,
+      followability_score: (result.followabilityScore as number) ?? 70,
+      followability_factors: (result.followabilityFactors as Record<string,unknown>) ?? {},
+      positioning_statement: (result.positioningStatement as string) ?? '',
+      content_pillars: (result.contentPillars as unknown[]) ?? [],
+      signature_lines: (result.signatureLines as string[]) ?? [],
+      target_influencers: (result.targetInfluencers as unknown[]) ?? [],
+      root_cause_insights: (result.rootCauseInsights as string[]) ?? [],
+      strategic_insights: (result.strategicInsights as string[]) ?? [],
       updated_at: new Date().toISOString(),
     }, { onConflict: 'client_id' });
 
@@ -78,8 +79,6 @@ async function assignArchetypes({ client, discoverRun, lsiRun }: {
   discoverRun: Record<string, unknown> | null;
   lsiRun: Record<string, unknown> | null;
 }) {
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const openrouterKey = process.env.OPENROUTER_API_KEY;
   const frames = (discoverRun?.frame_dist as Record<string, number>) || {};
   const archetypeHints = (discoverRun?.archetype_hints as string[]) || [];
   const crisisSignals = (discoverRun?.crisis_signals as string[]) || [];
@@ -108,7 +107,8 @@ async function assignArchetypes({ client, discoverRun, lsiRun }: {
     totalMentions: discoverRun?.total_mentions || 0,
   };
 
-  if (!openaiKey && !openrouterKey) {
+  const hasAIKey = process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+  if (!hasAIKey) {
     return generateFallbackArchetypes(clientProfile);
   }
 
@@ -149,37 +149,17 @@ Return ONLY valid JSON:
   "strategicInsights": ["Recommendation 1","Recommendation 2","Recommendation 3"]
 }`;
 
-  const endpoint = openrouterKey && !openaiKey
-    ? 'https://openrouter.ai/api/v1/chat/completions'
-    : 'https://api.openai.com/v1/chat/completions';
-  const authKey = openrouterKey && !openaiKey ? openrouterKey : openaiKey;
-  const model = openrouterKey && !openaiKey ? 'anthropic/claude-3.5-sonnet' : 'gpt-4o';
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${authKey}`,
-      'Content-Type': 'application/json',
-      ...((openrouterKey && !openaiKey) ? { 'HTTP-Referer': 'https://reputeos.com', 'X-Title': 'ReputeOS' } : {}),
-    },
-    body: JSON.stringify({
-      model,
-      ...(openrouterKey ? { provider: { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true } } : {}),
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Assign archetypes and positioning for:\n${JSON.stringify(clientProfile, null, 2)}` },
-      ],
-      temperature: 0.4,
-      max_tokens: 1800,
-    }),
-    signal: AbortSignal.timeout(45000),
+  const aiResult = await callAI({
+    systemPrompt,
+    userPrompt: `Assign archetypes and positioning for:\n${JSON.stringify(clientProfile, null, 2)}`,
+    maxTokens: 2000,
+    temperature: 0.4,
+    json: true,
+    timeoutMs: 50_000,
+    model: 'smart',
   });
-
-  if (!res.ok) throw new Error(`AI API error: ${res.status} ${await res.text().then(t => t.slice(0,200))}`);
-  const data = await res.json();
-  const raw = data.choices?.[0]?.message?.content || '{}';
   try {
-    return JSON.parse(raw.replace(/```json|```/g, '').trim());
+    return parseAIJson<Record<string, unknown>>(aiResult.content);
   } catch {
     throw new Error('AI returned invalid JSON for archetype assignment');
   }

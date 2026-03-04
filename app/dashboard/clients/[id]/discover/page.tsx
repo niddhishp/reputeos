@@ -671,10 +671,35 @@ export default function DiscoverPage() {
   const [stage,           setStage]           = useState('');
   const [error,           setError]           = useState('');
   const [loading,         setLoading]         = useState(true);
+  const [generatingReport, setGeneratingReport] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  const generateReport = useCallback(async (cId: string) => {
+    // report generation tracking
+    setStage('Generating narrative intelligence report…');
+    try {
+      const res = await fetch('/api/discover/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: cId }),
+        signal: AbortSignal.timeout(115_000),
+      });
+      if (res.ok) {
+        const data = await res.json() as { report?: DiscoveryReport };
+        if (data.report) setDiscoveryReport(data.report);
+      } else {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        console.warn('[ReputeOS] Report generation failed:', err.error);
+      }
+    } catch (e) {
+      console.warn('[ReputeOS] Report fetch error:', e instanceof Error ? e.message : e);
+    } finally {
+      setStage('');
+    }
   }, []);
 
   const pollScanStatus = useCallback(async (runId: string) => {
@@ -688,7 +713,12 @@ export default function DiscoverPage() {
         stopPolling();
         setScanning(false);
         setScanRun(data);
-        if (data.discovery_report) setDiscoveryReport(data.discovery_report as DiscoveryReport);
+        if (data.discovery_report) {
+          setDiscoveryReport(data.discovery_report as DiscoveryReport);
+        } else if (data.status === 'completed' && data.id) {
+          // Scan completed but no report yet — generate separately
+          void fetchReport(String(data.id));
+        }
       }
     } catch { /* silent */ }
   }, [stopPolling]);
@@ -706,7 +736,13 @@ export default function DiscoverPage() {
           .eq('client_id', clientId).order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (run) {
           setScanRun(run);
-          if (run.discovery_report) setDiscoveryReport(run.discovery_report as DiscoveryReport);
+          if (run.discovery_report) {
+            setDiscoveryReport(run.discovery_report as DiscoveryReport);
+          } else if (run.status === 'completed') {
+            // Scan done but no report — auto-generate on page load
+            setGeneratingReport(true);
+            fetchReport(String(run.id)).finally(() => {});
+          }
           if (run.status === 'in_progress') {
             setScanning(true);
             setProgress(Number(run.progress) || 0);
@@ -718,7 +754,26 @@ export default function DiscoverPage() {
     }
     load();
     return stopPolling;
-  }, [clientId, pollScanStatus, stopPolling]);
+  }, [clientId, pollScanStatus, stopPolling, generateReport]);
+
+  async function fetchReport(runId: string) {
+    setGeneratingReport(true);
+    try {
+      const res = await fetch('/api/discover/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId, clientId }),
+        signal: AbortSignal.timeout(130_000),
+      });
+      const data = await res.json() as Record<string,unknown>;
+      if (data.report) setDiscoveryReport(data.report as DiscoveryReport);
+      else setError(String(data.error || 'Report generation failed'));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Report generation failed');
+    } finally {
+      setGeneratingReport(false);
+    }
+  }
 
   async function startScan() {
     setError('');
@@ -740,7 +795,12 @@ export default function DiscoverPage() {
       if (data.status === 'completed') {
         setScanning(false);
         setScanRun(data);
-        if (data.discovery_report) setDiscoveryReport(data.discovery_report as DiscoveryReport);
+        if (data.discovery_report) {
+          setDiscoveryReport(data.discovery_report as DiscoveryReport);
+        } else {
+          // Trigger report generation as a separate call
+          void fetchReport(String(data.runId ?? data.id));
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Scan failed');
@@ -852,16 +912,37 @@ export default function DiscoverPage() {
           <S9_RiskMatrix           r={discoveryReport} />
           <S10_ReputationDiagnosis r={discoveryReport} />
         </div>
+      ) : generatingReport ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+          <div style={{ width: 60, height: 60, borderRadius: '50%', border: `3px solid ${BORDER}`, borderTop: `3px solid ${GOLD}`, animation: 'spin 1.2s linear infinite', margin: '0 auto 24px' }} />
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'white', marginBottom: 10 }}>Generating Intelligence Report…</h3>
+          <p style={{ fontSize: 13, color: MUTED, maxWidth: 420, margin: '0 auto 20px', lineHeight: 1.7 }}>
+            Claude is analysing {clientName}'s digital footprint, career history, industry context, and competitive landscape to produce your 10-section SRE Discovery Report. This takes 45–90 seconds.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
+            {['Profile & Background', 'Search Identity', 'Media Framing', 'Peer Analysis', 'Risk Assessment'].map((s, i) => (
+              <span key={i} style={{ padding: '4px 10px', borderRadius: 12, fontSize: 11, background: `${GOLD}10`, border: `1px solid ${GOLD}25`, color: `${GOLD}80`, animation: `pulse ${1.2 + i * 0.2}s ease-in-out infinite` }}>{s}</span>
+            ))}
+          </div>
+          {error && <p style={{ color: '#f87171', marginTop: 20, fontSize: 13 }}>{error}</p>}
+        </div>
       ) : (
         <div style={{ textAlign: 'center', padding: '60px 20px' }}>
           <Activity size={40} color={MUTED} style={{ marginBottom: 16 }} />
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Narrative report generation incomplete</h3>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Report generation failed</h3>
           <p style={{ fontSize: 13, color: MUTED, maxWidth: 400, margin: '0 auto 24px' }}>
-            The scan completed but the full narrative report did not generate — likely a timeout. Run a rescan to generate the complete 10-section report.
+            The scan data was collected but the AI narrative report could not be generated. This is usually a temporary AI service issue.
           </p>
-          <button onClick={startScan} style={{ padding: '12px 28px', background: GOLD, color: '#080C14', fontWeight: 700, borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontFamily: 'inherit' }}>
-            Rescan & Generate Report →
-          </button>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => scanRun?.id && fetchReport(String(scanRun.id))} style={{ padding: '12px 24px', background: GOLD, color: '#080C14', fontWeight: 700, borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontFamily: 'inherit' }}>
+              Generate Report (Scan data ready) →
+            </button>
+            <button onClick={startScan} style={{ padding: '12px 24px', background: 'transparent', color: GOLD, border: `1px solid ${GOLD}45`, borderRadius: 8, cursor: 'pointer', fontSize: 14, fontFamily: 'inherit' }}>
+              Full Rescan
+            </button>
+          </div>
+          {error && <p style={{ color: '#f87171', marginTop: 12, fontSize: 13 }}>{error}</p>}
         </div>
       )}
     </div>

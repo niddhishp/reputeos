@@ -39,28 +39,16 @@ function getOpenRouterKey() {
 }
 
 async function callAI(systemPrompt: string, userPrompt: string, json = true): Promise<string> {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${getOpenRouterKey()}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://reputeos.com',
-    },
-    body: JSON.stringify({
-      model: 'anthropic/claude-3.5-sonnet',
-      provider: { order: ['amazon-bedrock', 'anthropic', 'openai'], allow_fallbacks: true },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userPrompt },
-      ],
-      max_tokens: 2500,
-      temperature: 0.3,
-      ...(json ? { response_format: { type: 'json_object' } } : {}),
-    }),
+  const { callAI: aiCall } = await import('@/lib/ai/call');
+  const result = await aiCall({
+    systemPrompt,
+    userPrompt,
+    maxTokens: 2500,
+    temperature: 0.3,
+    json: json,
+    timeoutMs: 60_000,
   });
-  if (!res.ok) throw new Error(`OpenRouter error: ${res.status}`);
-  const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-  return data.choices[0]?.message?.content ?? '';
+  return result.content;
 }
 
 /** Lightweight web search for influencer content */
