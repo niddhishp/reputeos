@@ -312,10 +312,9 @@ async function runScan(
       completed_at: new Date().toISOString(),
       total_mentions: dedupedResults.length,
       sources_completed: totalSourcesScanned,
-      sentiment_dist: analysis.sentiment,
-      frame_dist: analysis.frames,
+      sentiment_summary: analysis.sentiment,
+      frame_distribution: analysis.frames,
       top_keywords: analysis.topKeywords,
-      mentions: topMentions,
       analysis_summary: analysis.summary,
       archetype_hints: analysis.archetypeHints,
       crisis_signals: analysis.crisisSignals,
@@ -372,7 +371,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!runId && !clientId) return Response.json({ error: 'runId or clientId required' }, { status: 400 });
 
   let query = supabase.from('discover_runs').select(
-    'id, status, progress, current_stage, total_mentions, sources_total, sources_completed, started_at, completed_at, sentiment_dist, frame_dist, top_keywords, analysis_summary, archetype_hints, crisis_signals, lsi_preliminary, module_summary, scan_errors, scan_duration_ms, error_message'
+    'id, status, progress, current_stage, total_mentions, sources_total, sources_completed, started_at, completed_at, sentiment_summary, frame_distribution, analysis_summary, archetype_hints, crisis_signals, lsi_preliminary, module_summary, scan_errors, scan_duration_ms, error_message'
   );
 
   if (runId) {
@@ -385,9 +384,8 @@ export async function GET(request: Request): Promise<Response> {
   if (error || !data) return Response.json({ error: 'Run not found' }, { status: 404 });
 
   if (data.status === 'completed' && searchParams.get('includeMentions') === 'true') {
-    const { data: full } = await supabase
-      .from('discover_runs').select('mentions').eq('id', data.id).single();
-    return Response.json({ ...data, mentions: full?.mentions ?? [] });
+    // mentions stored in separate table — return empty for now
+    return Response.json({ ...data, mentions: [] });
   }
 
   return Response.json(data);
