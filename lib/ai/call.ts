@@ -45,11 +45,10 @@ export async function callAI(opts: AICallOptions): Promise<AIResponse> {
 
   // ── 1. OpenRouter (preferred — routes to Bedrock, has credits) ──────────────
   if (openrouterKey) {
-    // Let OpenRouter route freely — no provider override
-    // Set your preferred model as default in openrouter.ai → Settings → Routing
+    // Confirmed working models on this OpenRouter account (verified 2026-03-05)
     const modelId = model === 'fast'
-      ? 'anthropic/claude-haiku-4-5'   // fast: haiku 4.5
-      : 'anthropic/claude-sonnet-4-6'; // smart: sonnet 4.6
+      ? 'anthropic/claude-haiku-4-5'   // fast, cheap — haiku 4.5
+      : 'anthropic/claude-sonnet-4-6'; // best quality — sonnet 4.6
 
     const body: Record<string, unknown> = {
       model: modelId,
