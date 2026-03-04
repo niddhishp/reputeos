@@ -95,6 +95,15 @@ function severityColors(sev: string) {
 
 function S1_ProfileOverview({ r }: { r: DiscoveryReport }) {
   const p = r.profile_overview;
+  if (!p) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   const scoreColor = p.digital_presence_score >= 65 ? '#4ade80' : p.digital_presence_score >= 40 ? GOLD : '#fb923c';
   const fields = [
     { label: 'Current Position',    value: p.current_position },
@@ -136,6 +145,15 @@ function S1_ProfileOverview({ r }: { r: DiscoveryReport }) {
 
 function S2_ProfessionalBackground({ r }: { r: DiscoveryReport }) {
   const pb = r.professional_background;
+  if (!pb) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   return (
     <Card>
       <SectionHeader icon={Briefcase} label="Professional Background" />
@@ -144,7 +162,7 @@ function S2_ProfessionalBackground({ r }: { r: DiscoveryReport }) {
         <p style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Leadership Trajectory</p>
         <div style={{ position: 'relative', paddingLeft: 24 }}>
           <div style={{ position: 'absolute', left: 7, top: 0, bottom: 0, width: 2, background: `${GOLD}25`, borderRadius: 1 }} />
-          {pb.trajectory.map((t, i) => (
+          {(pb.trajectory ?? []).map((t, i) => (
             <div key={i} style={{ position: 'relative', marginBottom: 18 }}>
               <div style={{ position: 'absolute', left: -24, top: 4, width: 14, height: 14, borderRadius: '50%', border: `2px solid ${GOLD}`, background: CARD, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD }} />
@@ -160,7 +178,7 @@ function S2_ProfessionalBackground({ r }: { r: DiscoveryReport }) {
         <div>
           <p style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Key Achievements</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {pb.key_achievements.map((a, i) => (
+            {(pb.key_achievements ?? []).map((a, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                 <Award size={12} color={GOLD} style={{ flexShrink: 0, marginTop: 2 }} />
                 <span style={{ fontSize: 12, color: TEXT }}>{a}</span>
@@ -178,7 +196,7 @@ function S2_ProfessionalBackground({ r }: { r: DiscoveryReport }) {
           )}
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 6 }}>Awards & Recognition</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {pb.awards_recognition.map((a, i) => (
+            {(pb.awards_recognition ?? []).map((a, i) => (
               <span key={i} style={{ fontSize: 12, color: TEXT }}>· {a}</span>
             ))}
           </div>
@@ -190,6 +208,15 @@ function S2_ProfessionalBackground({ r }: { r: DiscoveryReport }) {
 
 function S3_RecentDevelopments({ r }: { r: DiscoveryReport }) {
   const rd = r.recent_developments;
+  if (!rd) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   return (
     <Card>
       <SectionHeader icon={Calendar} label="Recent Developments & News Context" />
@@ -218,6 +245,15 @@ function S3_RecentDevelopments({ r }: { r: DiscoveryReport }) {
 
 function S4_SearchReputation({ r }: { r: DiscoveryReport }) {
   const sr = r.search_reputation;
+  if (!sr) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   const colors = [GOLD, '#60a5fa', '#4ade80', '#a78bfa', '#fb923c', '#f87171'];
   return (
     <Card>
@@ -226,7 +262,7 @@ function S4_SearchReputation({ r }: { r: DiscoveryReport }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
         <div>
           <p style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Keyword Association Map</p>
-          {sr.keyword_association_map?.map(({ keyword_cluster, percentage, dominant_signal }, i) => (
+          {(sr.keyword_association_map ?? []).map(({ keyword_cluster, percentage, dominant_signal }, i) => (
             <div key={i} style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                 <span style={{ fontSize: 12, color: TEXT }}>{keyword_cluster}</span>
@@ -256,7 +292,7 @@ function S4_SearchReputation({ r }: { r: DiscoveryReport }) {
             <span key={h} style={{ fontSize: 10, fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
           ))}
         </div>
-        {sr.query_analysis?.map((q, i) => (
+        {(sr.query_analysis ?? []).map((q, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.8fr 1.2fr', padding: '12px 16px', gap: 8, borderTop: `1px solid rgba(255,255,255,0.04)` }}>
             <span style={{ fontSize: 12, fontFamily: 'monospace', color: GOLD }}>{q.query}</span>
             <span style={{ fontSize: 12, color: TEXT }}>{q.dominant_signal}</span>
@@ -271,6 +307,15 @@ function S4_SearchReputation({ r }: { r: DiscoveryReport }) {
 
 function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
   const mf = r.media_framing;
+  if (!mf) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   const fColors = [GOLD, '#60a5fa', '#f87171', '#a78bfa', '#4ade80'];
   const frameEntries = [
     { k: 'expert_thought_leader', label: 'Expert / Thought Leader' },
@@ -317,7 +362,7 @@ function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
             <div style={{ marginBottom: 8 }}>
               <div style={{ fontSize: 10, color: '#f87171', marginBottom: 5 }}>Currently Associated With</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                {mf.media_language.frequent_descriptors?.map((d, i) => (
+                {(mf.media_language?.frequent_descriptors ?? []).map((d, i) => (
                   <span key={i} style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', fontSize: 11, color: '#f87171', fontStyle: 'italic' }}>"{d}"</span>
                 ))}
               </div>
@@ -325,7 +370,7 @@ function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
             <div>
               <div style={{ fontSize: 10, color: '#4ade80', marginBottom: 5 }}>Should Be Associated With</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                {mf.media_language.rare_descriptors?.map((d, i) => (
+                {(mf.media_language?.rare_descriptors ?? []).map((d, i) => (
                   <span key={i} style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)', fontSize: 11, color: '#4ade80' }}>{d}</span>
                 ))}
               </div>
@@ -353,6 +398,15 @@ function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
 
 function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
   const s = r.social_and_thought_leadership;
+  if (!s) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   const actColor = (a: string) => a === 'Active' ? '#4ade80' : a === 'Dormant' ? '#fb923c' : '#6b7280';
 
   const thoughtLeadershipItems = [
@@ -444,6 +498,15 @@ function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
 
 function S7_PeerComparison({ r }: { r: DiscoveryReport }) {
   const pc = r.peer_comparison;
+  if (!pc) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   const visColor = (v: string) => v === 'High' ? '#4ade80' : v === 'Medium-High' ? GOLD : v === 'Medium' ? '#60a5fa' : '#fb923c';
   return (
     <Card>
@@ -457,7 +520,7 @@ function S7_PeerComparison({ r }: { r: DiscoveryReport }) {
               <span key={h} style={{ fontSize: 10, fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</span>
             ))}
           </div>
-          {pc.peers?.map((peer, i) => (
+          {(pc.peers ?? []).map((peer, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 0.7fr 1fr 1fr 1.5fr', padding: '14px 16px', gap: 8, borderTop: `1px solid rgba(255,255,255,0.04)`, alignItems: 'start' }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{peer.name}</div>
@@ -478,6 +541,15 @@ function S7_PeerComparison({ r }: { r: DiscoveryReport }) {
 
 function S8_KeyQuestions({ r }: { r: DiscoveryReport }) {
   const kq = r.key_questions;
+  if (!kq) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   const questions = [
     { num: '01', q: 'Identity Architecture', a: kq.identity_architecture, icon: Target },
     { num: '02', q: 'Search Results Breakdown', a: kq.search_results_breakdown, icon: Search },
@@ -508,6 +580,15 @@ function S8_KeyQuestions({ r }: { r: DiscoveryReport }) {
 
 function S9_RiskMatrix({ r }: { r: DiscoveryReport }) {
   const ra = r.risk_assessment;
+  if (!ra) return (<>  <Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: DIM, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: GOLD, opacity: 0.4 }} />
+      </div>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card></>);
+  
   const [open, setOpen] = useState<number | null>(null);
   return (
     <Card>
@@ -525,7 +606,7 @@ function S9_RiskMatrix({ r }: { r: DiscoveryReport }) {
             <span key={h} style={{ fontSize: 10, fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</span>
           ))}
         </div>
-        {ra.layers?.map((layer, i) => {
+        {(ra.layers ?? []).map((layer, i) => {
           const sc = severityColors(layer.gap_severity);
           const isOpen = open === i;
           return (
@@ -554,6 +635,11 @@ function S9_RiskMatrix({ r }: { r: DiscoveryReport }) {
 
 function S10_ReputationDiagnosis({ r }: { r: DiscoveryReport }) {
   const rd = r.reputation_diagnosis;
+  if (!rd) return (<Card>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+      <span style={{ fontSize: 13, color: MUTED }}>Analysing… this section will appear shortly.</span>
+    </div>
+  </Card>);
   const rColor = rd.sre_opportunity_rating === 'Exceptional' ? '#4ade80' : rd.sre_opportunity_rating === 'High' ? GOLD : '#60a5fa';
   return (
     <Card>
@@ -571,7 +657,7 @@ function S10_ReputationDiagnosis({ r }: { r: DiscoveryReport }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: '#4ade80', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
             <CheckCircle size={12} color='#4ade80' /> Reputation Strengths
           </div>
-          {rd.strengths?.map((s, i) => (
+          {(rd.strengths ?? []).map((s, i) => (
             <div key={i} style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.15)', borderRadius: 8, padding: '11px 14px', marginBottom: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#4ade80', marginBottom: 4 }}>{s.title}</div>
               <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.55 }}>{s.description}</div>
@@ -582,7 +668,7 @@ function S10_ReputationDiagnosis({ r }: { r: DiscoveryReport }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
             <AlertTriangle size={12} color='#f87171' /> Reputation Vulnerabilities
           </div>
-          {rd.vulnerabilities?.map((v, i) => (
+          {(rd.vulnerabilities ?? []).map((v, i) => (
             <div key={i} style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: 8, padding: '11px 14px', marginBottom: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#f87171', marginBottom: 4 }}>{v.title}</div>
               <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.55 }}>{v.description}</div>
