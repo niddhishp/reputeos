@@ -198,7 +198,6 @@ function S3_RecentDevelopments({ r }: { r: DiscoveryReport }) {
         <p style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)', margin: 0, lineHeight: 1.6 }}>{rd.major_recent_event}</p>
       </div>
       <Quote text={rd.strategic_context} />
-      <p style={{ fontSize: 13, color: TEXT, lineHeight: 1.7, marginTop: 14 }}>{rd.media_coverage_patterns}</p>
       {rd.news_items?.length > 0 && (
         <div style={{ marginTop: 18 }}>
           <p style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>News Items</p>
@@ -261,7 +260,7 @@ function S4_SearchReputation({ r }: { r: DiscoveryReport }) {
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.8fr 1.2fr', padding: '12px 16px', gap: 8, borderTop: `1px solid rgba(255,255,255,0.04)` }}>
             <span style={{ fontSize: 12, fontFamily: 'monospace', color: GOLD }}>{q.query}</span>
             <span style={{ fontSize: 12, color: TEXT }}>{q.dominant_signal}</span>
-            <span style={{ fontSize: 11, color: MUTED }}>{q.top_results_type}</span>
+            <span style={{ fontSize: 11, color: MUTED }}>{q.insight}</span>
             <span style={{ fontSize: 12, color: MUTED, fontStyle: 'italic' }}>{q.insight}</span>
           </div>
         ))}
@@ -342,21 +341,10 @@ function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
       </div>
       <InsightBox text={mf.strategic_framing_insight} />
 
-      {mf.coverage_context?.length > 0 && (
+      {mf.framing_narrative && (
         <div style={{ marginTop: 20 }}>
-          <p style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Coverage by Publication Type</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-            {mf.coverage_context.map((c, i) => (
-              <div key={i} style={{ background: DIM, borderRadius: 8, padding: '12px 14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)' }}>{c.publication_type}</span>
-                  <Badge text={c.tone} color={c.tone === 'Positive' ? '#4ade80' : c.tone === 'Mixed' ? GOLD : MUTED} />
-                </div>
-                <div style={{ fontSize: 11, color: MUTED, marginBottom: 4 }}>{c.publications?.join(', ')}</div>
-                <div style={{ fontSize: 11, color: TEXT }}>{c.coverage_angle}</div>
-              </div>
-            ))}
-          </div>
+          <p style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Framing Analysis</p>
+          <p style={{ fontSize: 13, color: TEXT, lineHeight: 1.7 }}>{mf.framing_narrative}</p>
         </div>
       )}
     </Card>
@@ -371,9 +359,9 @@ function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
     { label: 'Conference Participation', items: s.conference_participation, icon: Users },
     { label: 'Speaking Engagements',     items: s.speaking_engagements,     icon: MessageSquare },
     { label: 'Op-eds / Articles',        items: s.op_eds,                   icon: FileText },
-    { label: 'TV Interviews',            items: s.tv_interviews,             icon: Radio },
-    { label: 'Podcast Appearances',      items: s.podcast_appearances,       icon: Radio },
-    { label: 'Academic / Institutional', items: s.academic_institutional,    icon: Award },
+    { label: 'Speaking Engagements',     items: s.speaking_engagements,      icon: Radio },
+    { label: 'Conference Participation', items: s.conference_participation,  icon: Radio },
+    { label: 'Op-Eds & Articles',        items: s.op_eds,                    icon: Award },
   ] as const;
 
   return (
@@ -394,7 +382,7 @@ function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
           { label: 'Wikipedia', icon: '📖', data: {
               followers: s.wikipedia.exists ? s.wikipedia.quality : 'Absent',
               activity: s.wikipedia.exists ? 'Exists' : 'Absent',
-              positioning: s.wikipedia.narrative,
+              positioning: s.wikipedia.quality,
               dormant: !s.wikipedia.exists,
             }
           },

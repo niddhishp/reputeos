@@ -422,34 +422,25 @@ import { buildDiscoveryReportPrompts, DiscoveryReport, DiscoveryReportInput } fr
 
 export async function generateDiscoveryReport(
   input: DiscoveryReportInput
-): Promise<DiscoveryReport | null> {
-  const hasKey = process.env.ANTHROPIC_API_KEY || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
-  if (!hasKey) {
-    console.warn('[ReputeOS] No AI key — skipping discovery report generation');
-    return null;
-  }
-
+): Promise<DiscoveryReport> {
   const { systemPrompt, userPrompt } = buildDiscoveryReportPrompts(input);
 
-  try {
-    const { callAI, parseAIJson } = await import('@/lib/ai/call');
-    const result = await callAI({
-      systemPrompt,
-      userPrompt,
-      json: true,
-      maxTokens: 6000,
-      temperature: 0.3,
-      timeoutMs: 90_000,
-      model: 'smart',
-    });
+  const { callAI, parseAIJson } = await import('@/lib/ai/call');
+  const result = await callAI({
+    systemPrompt,
+    userPrompt,
+    json: true,
+    maxTokens: 8000,
+    temperature: 0.3,
+    timeoutMs: 100_000,
+    model: 'smart',
+  });
 
-    if (!result.content) return null;
-    const report = parseAIJson<DiscoveryReport>(result.content);
-    report.generated_at = new Date().toISOString();
-    console.log('[ReputeOS] Discovery report generated via', result.provider, result.model);
-    return report;
-  } catch (e) {
-    console.error('[ReputeOS] Discovery report generation failed:', e instanceof Error ? e.message : e);
-    return null;
-  }
+  if (!result.content) throw new Error('AI returned empty content');
+
+  console.log('[ReputeOS] Discovery report raw length:', result.content.length, 'via', result.provider, result.model);
+
+  const report = parseAIJson<DiscoveryReport>(result.content);
+  report.generated_at = new Date().toISOString();
+  return report;
 }
