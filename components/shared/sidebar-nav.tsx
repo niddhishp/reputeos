@@ -51,7 +51,7 @@ export function SidebarNav({ user, role = 'consultant' }: SidebarNavProps) {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/');
     router.refresh();
   };
 

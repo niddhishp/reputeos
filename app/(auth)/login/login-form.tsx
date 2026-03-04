@@ -1,168 +1,166 @@
-// app/(auth)/login/login-form.tsx
 'use client';
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { Eye, EyeOff, Lock, Mail, ArrowRight, Shield } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useToast } from '@/hooks/use-toast';
+import { Eye, EyeOff, Lock, Mail, Shield, ArrowRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
+const GOLD = '#C9A84C';
+const BG   = '#080C14';
+
 export default function LoginForm() {
-  const router = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
-  const { toast } = useToast();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [showPw, setShowPw]         = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setLoading(true);
     setError('');
-
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
-
-      toast({
-        title: 'Welcome back',
-        description: 'Successfully signed in to ReputeOS.',
-      });
-
       const from = searchParams.get('from');
-      const destination = from && from.startsWith('/') ? from : '/dashboard/clients';
-      router.push(destination);
+      router.push(from && from.startsWith('/') ? from : '/dashboard/clients');
       router.refresh();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to sign in';
-      setError(message);
+      setError(err instanceof Error ? err.message : 'Failed to sign in');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-50 px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
-      >
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <Shield className="h-8 w-8 text-primary-500" style={{ color: '#0066CC' }} />
-            <h1 className="text-3xl font-bold text-neutral-900">ReputeOS</h1>
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: BG, fontFamily: "'Inter', system-ui, sans-serif", padding: 24,
+    }}>
+      <div style={{ width: '100%', maxWidth: 420 }}>
+
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: 14,
+            background: `${GOLD}18`, border: `1px solid ${GOLD}40`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 16px',
+          }}>
+            <Shield style={{ width: 24, height: 24, color: GOLD }} />
           </div>
-          <p className="text-neutral-600">Strategic Reputation Engineering</p>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: 'white', margin: '0 0 6px', letterSpacing: '-0.5px' }}>
+            ReputeOS
+          </h1>
+          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.35)', margin: 0 }}>
+            Strategic Reputation Engineering
+          </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign In</CardTitle>
-            <CardDescription>
-              Enter your credentials to access your dashboard
-            </CardDescription>
-          </CardHeader>
+        {/* Card */}
+        <div style={{
+          background: '#0d1117', border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 16, padding: '36px 32px',
+        }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'white', margin: '0 0 24px' }}>
+            Sign in to your account
+          </h2>
+
+          {error && (
+            <div style={{
+              background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)',
+              borderRadius: 8, padding: '10px 14px', marginBottom: 20,
+              color: '#f87171', fontSize: 13,
+            }}>
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleLogin}>
-            <CardContent className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
-                    autoComplete="email"
-                  />
-                </div>
+            {/* Email */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>
+                Email
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Mail style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: 'rgba(255,255,255,0.2)' }} />
+                <input
+                  type="email" required autoComplete="email"
+                  value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  style={{
+                    width: '100%', padding: '11px 12px 11px 38px',
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 8, color: 'white', fontSize: 14, outline: 'none',
+                    boxSizing: 'border-box', fontFamily: 'inherit',
+                    transition: 'border-color 150ms',
+                  }}
+                  onFocus={e => (e.target.style.borderColor = `${GOLD}60`)}
+                  onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
+                />
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10"
-                    required
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+            {/* Password */}
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>
+                Password
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Lock style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: 'rgba(255,255,255,0.2)' }} />
+                <input
+                  type={showPw ? 'text' : 'password'} required autoComplete="current-password"
+                  value={password} onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  style={{
+                    width: '100%', padding: '11px 40px 11px 38px',
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 8, color: 'white', fontSize: 14, outline: 'none',
+                    boxSizing: 'border-box', fontFamily: 'inherit',
+                    transition: 'border-color 150ms',
+                  }}
+                  onFocus={e => (e.target.style.borderColor = `${GOLD}60`)}
+                  onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
+                />
+                <button
+                  type="button" onClick={() => setShowPw(!showPw)}
+                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.25)', padding: 0, display: 'flex' }}
+                >
+                  {showPw ? <EyeOff style={{ width: 15, height: 15 }} /> : <Eye style={{ width: 15, height: 15 }} />}
+                </button>
               </div>
-            </CardContent>
+            </div>
 
-            <CardFooter className="flex flex-col gap-4">
-              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-                {isLoading ? (
-                  'Signing in…'
-                ) : (
-                  <>
-                    Sign In
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
-
-              <p className="text-sm text-neutral-600 text-center">
-                Don&apos;t have an account?{' '}
-                <Link href="/signup" className="text-blue-600 hover:text-blue-700 font-medium">
-                  Sign up
-                </Link>
-              </p>
-            </CardFooter>
+            <button
+              type="submit" disabled={loading}
+              style={{
+                width: '100%', padding: '13px', borderRadius: 8, border: 'none',
+                background: loading ? `${GOLD}60` : GOLD,
+                color: '#080C14', fontWeight: 700, fontSize: 15,
+                cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                transition: 'background 150ms',
+              }}
+            >
+              {loading ? 'Signing in…' : <><span>Sign In</span><ArrowRight style={{ width: 16, height: 16 }} /></>}
+            </button>
           </form>
-        </Card>
 
-        <p className="text-xs text-neutral-500 text-center mt-8">
-          Protected by enterprise-grade security. Your data is encrypted at rest and in transit.
+          <p style={{ textAlign: 'center', fontSize: 13, color: 'rgba(255,255,255,0.3)', marginTop: 20, marginBottom: 0 }}>
+            No account?{' '}
+            <Link href="/signup" style={{ color: GOLD, textDecoration: 'none', fontWeight: 600 }}>
+              Sign up
+            </Link>
+          </p>
+        </div>
+
+        <p style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 24 }}>
+          Enterprise-grade encryption. Your data never leaves your control.
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }

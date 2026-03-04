@@ -37,7 +37,7 @@ export default async function ClientOverviewPage({ params }: { params: Promise<{
   if (!user) redirect('/login');
 
   const { data: client } = await supabase
-    .from('clients').select('*').eq('id', id).eq('user_id', user.id).single();
+    .from('clients').select('*').eq('id', id).eq('user_id', user.id).maybeSingle();
   if (!client) notFound();
 
   const [{ data: latestLSI }, { data: discoverRun }, { data: positioning }] = await Promise.all([
