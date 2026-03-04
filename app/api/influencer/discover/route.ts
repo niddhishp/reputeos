@@ -13,12 +13,22 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient, createAdminClient, verifyClientOwnership } from '@/lib/supabase/server';
 
-const Schema = z.object({
-  clientId:      z.string().uuid(),
+// Single-influencer mode (from hub page)
+const SingleSchema = z.object({
+  clientId:       z.string().uuid(),
   influencerName: z.string().min(2),
-  linkedinUrl:   z.string().url().optional(),
-  archetype:     z.string(),           // the target archetype e.g. "The Maven"
+  linkedinUrl:    z.string().url().optional().or(z.literal('')).transform(v => v === '' ? undefined : v),
+  archetype:      z.string().default(''),
 });
+
+// Auto-discover mode (called after archetype assignment — reads from positioning row)
+const AutoSchema = z.object({
+  clientId:      z.string().uuid(),
+  autoDiscover:  z.literal(true),
+  limit:         z.number().int().min(1).max(5).default(3),
+});
+
+const Schema = z.union([SingleSchema, AutoSchema]);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -269,9 +279,54 @@ export async function POST(request: Request): Promise<Response> {
   const parsed = Schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 });
 
-  const { clientId, influencerName, linkedinUrl, archetype } = parsed.data;
-  const isOwner = await verifyClientOwnership(clientId);
+  const isOwner = await verifyClientOwnership(parsed.data.clientId);
   if (!isOwner) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  // ── AUTO-DISCOVER MODE: read target influencers from positioning row ────────
+  if ('autoDiscover' in parsed.data && parsed.data.autoDiscover) {
+    const { clientId, limit } = parsed.data;
+    const { data: pos } = await supabase
+      .from('positioning')
+      .select('personal_archetype, target_influencers')
+      .eq('client_id', clientId)
+      .maybeSingle();
+
+    if (!pos?.target_influencers) {
+      return NextResponse.json({ message: 'No target influencers in positioning' }, { status: 200 });
+    }
+
+    const targets = (pos.target_influencers as Array<{ name: string; archetype?: string; linkedinUrl?: string }>)
+      .slice(0, limit);
+
+    // Fire off each influencer discovery sequentially (avoid rate limits)
+    const results = [];
+    for (const t of targets) {
+      try {
+        const subBody = {
+          clientId,
+          influencerName: t.name,
+          archetype: t.archetype ?? pos.personal_archetype ?? '',
+          linkedinUrl: t.linkedinUrl,
+        };
+        // Call ourselves recursively as a sub-request
+        const subReq = new Request(
+          `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://reputeos.com'}/api/influencer/discover`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': request.headers.get('cookie') ?? '' }, body: JSON.stringify(subBody) }
+        );
+        const subRes = await fetch(subReq.url, { method: 'POST', headers: Object.fromEntries(subReq.headers), body: JSON.stringify(subBody), signal: AbortSignal.timeout(60000) });
+        const subData = await subRes.json();
+        results.push({ name: t.name, success: subRes.ok, data: subData });
+      } catch (e) {
+        results.push({ name: t.name, success: false, error: (e as Error).message });
+      }
+    }
+    return NextResponse.json({ autoDiscover: true, results });
+  }
+
+  // ── SINGLE-INFLUENCER MODE ──────────────────────────────────────────────────
+  const { clientId, influencerName, linkedinUrl, archetype } = parsed.data as {
+    clientId: string; influencerName: string; linkedinUrl?: string; archetype: string;
+  };
 
   const admin = createAdminClient();
 
