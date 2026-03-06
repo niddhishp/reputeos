@@ -23,6 +23,7 @@ export interface ClientProfile {
   linkedin_url: string | null;
   keywords: string[] | null;
   social_links?: Record<string, string> | null;
+  bio?: string | null;  // self-described bio — used for known works extraction
 }
 
 export interface SourceModuleResult {

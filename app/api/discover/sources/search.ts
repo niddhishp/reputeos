@@ -253,6 +253,7 @@ export async function fetchSearchSources(client: ClientProfile): Promise<SourceM
       company:      client.company      ?? undefined,
       industry:     client.industry     ?? undefined,
       keywords:     client.keywords     ?? undefined,
+      bio:          client.bio          ?? undefined,
       social_links: client.social_links ?? undefined,
     });
     deepQueries = flattenQuerySet(querySet);
@@ -265,22 +266,35 @@ export async function fetchSearchSources(client: ClientProfile): Promise<SourceM
   }
 
   // ── Step 2: Always-run enrichment sources (Wikipedia, Perplexity, Exa) ───
-  const [wikipedia, perplexity, exa] = await Promise.allSettled([
+  // Extract known titles for targeted enrichment
+  const { extractKnownTitlesForSearch } = await import('@/lib/ai/agents/query-generator');
+  const knownTitles = extractKnownTitlesForSearch(client.bio ?? '', client.keywords ?? []);
+
+  const alwaysRun: Promise<SourceResult[]>[] = [
     wikipediaSearch(client.name),
     perplexitySynthesis(client),
+    // General Exa search
     exaSearch(`${client.name} ${client.company ?? ''} India reputation works career`, 10, 'search'),
-  ]);
-  if (wikipedia.status  === 'fulfilled') allResults.push(...wikipedia.value);
-  else errors.push(`Wikipedia: ${wikipedia.reason?.message}`);
-  if (perplexity.status === 'fulfilled') allResults.push(...perplexity.value);
-  else errors.push(`Perplexity: ${perplexity.reason?.message}`);
-  if (exa.status        === 'fulfilled') allResults.push(...exa.value);
-  else errors.push(`Exa: ${exa.reason?.message}`);
+    // YouTube-specific Exa search — always run even if no YouTube link provided
+    exaSearch(`site:youtube.com "${client.name}" interview OR film OR movie OR documentary`, 8, 'video'),
+    // Amazon books search
+    exaSearch(`site:amazon.in "${client.name}" OR site:amazon.com "${client.name}" book author`, 5, 'publication'),
+  ];
 
-  // ── Step 3: Run deep queries in batches of 6 (SerpAPI rate limits) ────────
-  // Priority queries first (core identity, then works, then platform)
-  const BATCH_SIZE = 6;
-  const MAX_QUERIES = 30; // cap to stay within rate limits
+  // For each known title, add a targeted search
+  for (const title of knownTitles.slice(0, 5)) {
+    alwaysRun.push(exaSearch(`"${title}" ${client.name} film movie review`, 5, 'works'));
+  }
+
+  const enrichResults = await Promise.allSettled(alwaysRun);
+  for (const r of enrichResults) {
+    if (r.status === 'fulfilled') allResults.push(...r.value);
+  }
+
+  // ── Step 3: Run deep queries in batches of 5 (SerpAPI rate limits) ────────
+  // Priority queries first: core → works → platform → thought leader → media
+  const BATCH_SIZE = 5;
+  const MAX_QUERIES = 40;  // raised from 30 — known-works queries get priority slots
   const priorityQueries = deepQueries.slice(0, MAX_QUERIES);
 
   for (let i = 0; i < priorityQueries.length; i += BATCH_SIZE) {

@@ -12,9 +12,21 @@ export interface DiscoveryReportInput {
     industry: string;
     keywords: string[];
     linkedin_url?: string;
+    bio?: string;                              // self-described biography — ground truth
+    social_links?: Record<string, string>;     // verified social profiles
+    known_works?: string[];                    // explicitly stated films/books/articles
   };
   total_mentions: number;
-  top_mentions: Array<{ source: string; title: string; snippet: string; sentiment: number; frame: string }>;
+  top_mentions: Array<{
+    source: string;
+    title: string;
+    snippet: string;
+    sentiment: number;
+    frame: string;
+    url?: string;       // actual URL found — critical for grounding
+    category?: string;  // search|news|video|social|academic etc
+    date?: string;
+  }>;
   sentiment: { positive: number; neutral: number; negative: number };
   frames: { expert: number; founder: number; leader: number; family: number; crisis: number; other: number };
   top_keywords: string[];

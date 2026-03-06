@@ -36,7 +36,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const { data: clientData } = await supabase
     .from('clients')
-    .select('name, company, role, industry, linkedin_url, keywords, social_links')
+    .select('name, company, role, industry, linkedin_url, keywords, social_links, bio')
     .eq('id', clientId)
     .single();
 
@@ -50,6 +50,7 @@ export async function POST(request: Request): Promise<Response> {
     linkedin_url: clientData.linkedin_url,
     keywords: clientData.keywords,
     social_links: clientData.social_links,
+    bio: clientData.bio,
   };
 
   const admin = createAdminClient();
@@ -331,6 +332,7 @@ async function runScan(
       scan_errors: moduleErrors.slice(0, 50),
       scan_duration_ms: Date.now() - scanStart,
       discovery_report: discoveryReport,
+      enriched_results: topMentions,  // ← save for report generation
     })
     .eq('id', runId);
 
