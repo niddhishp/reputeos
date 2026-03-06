@@ -13,10 +13,16 @@ import { SourceResult, SourceModuleResult, ClientProfile, isRelevant } from './t
 async function fetchYouTubeViaSerpAPI(client: ClientProfile): Promise<SourceResult[]> {
   if (!process.env.SERPAPI_KEY) return [];
   try {
+    // Extract film/work titles from bio for targeted YouTube queries
+    const { extractKnownTitlesForSearch } = await import('@/lib/ai/agents/query-generator');
+    const knownTitles = extractKnownTitlesForSearch(client.bio ?? '', client.keywords ?? []);
+
     const queries = [
       `${client.name} interview`,
+      `${client.name} director film`,
       `${client.name} talk speech`,
-      `${client.name} podcast`,
+      // Also search for known film titles on YouTube
+      ...knownTitles.slice(0, 3).map(title => `${title} ${client.name.split(' ')[0]}`),
     ];
 
     const all: SourceResult[] = [];
@@ -31,8 +37,9 @@ async function fetchYouTubeViaSerpAPI(client: ClientProfile): Promise<SourceResu
       if (!res.ok) continue;
       const data = await res.json();
 
-      for (const v of (data.video_results ?? []).slice(0, 4)) {
-        if (!isRelevant(v.title ?? '', client.name)) continue;
+      for (const v of (data.video_results ?? []).slice(0, 5)) {
+        // Don't filter by isRelevant here — we searched by name, trust the results
+        // YouTube titles often name the film, not the director
         all.push({
           source: 'YouTube',
           category: 'video',

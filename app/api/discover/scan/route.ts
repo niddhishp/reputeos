@@ -17,6 +17,7 @@ import { fetchFinancialSources } from '../sources/financial';
 import { fetchRegulatorySources } from '../sources/regulatory';
 import { fetchAcademicSources } from '../sources/academic';
 import { fetchVideoSources } from '../sources/video';
+import { fetchDirectUrls } from '../sources/direct-urls';
 import { runFullAnalysis, calculateLSI } from '../sources/ai-analysis';
 
 const Schema = z.object({ clientId: z.string().uuid() });
@@ -36,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const { data: clientData } = await supabase
     .from('clients')
-    .select('name, company, role, industry, linkedin_url, keywords, social_links, bio')
+    .select('name, company, role, industry, linkedin_url, keywords, social_links, bio, known_urls')
     .eq('id', clientId)
     .single();
 
@@ -51,6 +52,7 @@ export async function POST(request: Request): Promise<Response> {
     keywords: clientData.keywords,
     social_links: clientData.social_links,
     bio: clientData.bio,
+    known_urls: clientData.known_urls ?? [],
   };
 
   const admin = createAdminClient();
@@ -194,10 +196,14 @@ async function runScan(
     });
   }
 
+  const knownUrls = (client.known_urls ?? []) as string[];
+
   const [
+    directResult,
     searchResult, newsResult, socialResult, financialResult,
     regulatoryResult, academicResult, videoResult,
   ] = await Promise.allSettled([
+    wrapModule(fetchDirectUrls(knownUrls, client), 'Direct Coverage'),
     wrapModule(fetchSearchSources(client),     'Search & AI'),
     wrapModule(fetchNewsSources(client),       'News & Media'),
     wrapModule(fetchSocialSources(client),     'Social Media'),
@@ -211,10 +217,11 @@ async function runScan(
 
   // ── Collect results ────────────────────────────────────────────────────────
   const moduleResults = [
+    directResult,
     searchResult, newsResult, socialResult, financialResult,
     regulatoryResult, academicResult, videoResult,
   ];
-  const moduleNames = ['search', 'news', 'social', 'financial', 'regulatory', 'academic', 'video'];
+  const moduleNames = ['direct', 'search', 'news', 'social', 'financial', 'regulatory', 'academic', 'video'];
 
   const allResults: SourceResult[] = [];
   const moduleErrors: string[] = [];

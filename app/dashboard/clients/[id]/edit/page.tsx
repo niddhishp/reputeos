@@ -31,6 +31,7 @@ interface FormData {
   keywords: string;
   bio: string;
   target_lsi: number;
+  known_urls: string;  // newline-separated URLs of known press coverage
 }
 
 const accent = '#C9A84C';
@@ -53,7 +54,7 @@ export default function EditClientPage() {
   const [form, setForm] = useState<FormData>({
     name: '', role: '', company: '', industry: '',
     linkedin_url: '', social_urls: {}, platforms: ['linkedin'],
-    keywords: '', bio: '', target_lsi: 75,
+    keywords: '', bio: '', target_lsi: 75, known_urls: '',
   });
 
   useEffect(() => {
@@ -96,6 +97,7 @@ export default function EditClientPage() {
         keywords: (client.keywords ?? []).join(', '),
         bio: client.bio ?? '',
         target_lsi: client.target_lsi ?? 75,
+        known_urls: ((client.known_urls ?? []) as string[]).join('\n'),
       });
 
       setLoading(false);
@@ -143,6 +145,7 @@ export default function EditClientPage() {
         social_links,
         keywords: keywords.length > 0 ? keywords : null,
         bio: form.bio.trim() || null,
+        known_urls: form.known_urls.split('\n').map(u => u.trim()).filter(u => u.startsWith('http')) || null,
         target_lsi: form.target_lsi,
         updated_at: new Date().toISOString(),
       })
@@ -363,6 +366,27 @@ export default function EditClientPage() {
             />
             <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 4 }}>
               Comma-separated. Used to filter relevant mentions from 62 sources.
+            </p>
+          </div>
+
+          {/* Known Coverage URLs — bypasses search entirely */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>
+              Known Press Coverage & Content URLs
+              <span style={{
+                marginLeft: 8, fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
+                background: 'rgba(201,168,76,0.15)', color: accent,
+                padding: '2px 6px', borderRadius: 4,
+              }}>DIRECT FETCH</span>
+            </label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 140, resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }}
+              value={form.known_urls}
+              onChange={e => set('known_urls', e.target.value)}
+              placeholder={`Paste one URL per line — articles, YouTube videos, Amazon books, podcasts, interviews:\nhttps://www.mid-day.com/entertainment/...\nhttps://www.youtube.com/watch?v=...\nhttps://www.amazon.in/Your-Book/dp/...\nhttps://podcasts.apple.com/...`}
+            />
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 4 }}>
+              These are fetched directly during every scan — no search needed. Add every article, interview, podcast, YouTube video, and Amazon listing you know exists. The AI uses the actual page content, not just metadata.
             </p>
           </div>
 

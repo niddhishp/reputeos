@@ -23,7 +23,8 @@ export interface ClientProfile {
   linkedin_url: string | null;
   keywords: string[] | null;
   social_links?: Record<string, string> | null;
-  bio?: string | null;  // self-described bio — used for known works extraction
+  bio?: string | null;        // self-described bio — used for known works extraction
+  known_urls?: string[] | null;  // user-provided press coverage URLs — fetched directly
 }
 
 export interface SourceModuleResult {
@@ -132,13 +133,18 @@ function decodeXML(str: string): string {
 }
 
 export function isRelevant(text: string, name: string): boolean {
-  const nameParts = name.toLowerCase().split(/\s+/);
+  const nameParts = name.toLowerCase().split(/\s+/).filter(p => p.length > 2);
   const textLower = text.toLowerCase();
-  // Match if at least first + last name appear
-  if (nameParts.length >= 2) {
-    return nameParts.every(part => part.length > 2 && textLower.includes(part));
-  }
-  return textLower.includes(name.toLowerCase());
+
+  // Match if full name appears (any spelling — check first name at minimum)
+  if (nameParts.length === 0) return false;
+
+  // First name match alone is sufficient (e.g. "Niddhish" in title = relevant)
+  const firstName = nameParts[0];
+  if (textLower.includes(firstName)) return true;
+
+  // Or any part of the name longer than 4 chars
+  return nameParts.some(part => part.length > 4 && textLower.includes(part));
 }
 
 export function buildSearchName(client: ClientProfile): string {
@@ -146,8 +152,24 @@ export function buildSearchName(client: ClientProfile): string {
 }
 
 export function buildSearchQuery(client: ClientProfile, suffix = ''): string {
-  const parts = [`"${client.name}"`];
+  // Use first name + last name without quotes as primary — catches spelling variations
+  const parts = [client.name];
   if (client.company) parts.push(`"${client.company}"`);
   if (suffix) parts.push(suffix);
   return parts.join(' ');
+}
+
+/** Generate name spelling variations — handles double-vowel names like Puuzhakkal/Puuzhakal */
+export function buildNameVariants(name: string): string[] {
+  const variants = new Set<string>([name]);
+
+  // Replace double vowels with single (Puuzhakkal → Puzhakkal, Puuzhakkal → Puuzhakal)
+  const doubleVowelReduced = name.replace(/([aeiou])\1/gi, '$1');
+  if (doubleVowelReduced !== name) variants.add(doubleVowelReduced);
+
+  // Also try first name only (useful for YouTube/social)
+  const firstName = name.split(' ')[0];
+  if (firstName && firstName.length > 3) variants.add(firstName);
+
+  return [...variants];
 }
