@@ -66,12 +66,7 @@ export async function POST(req: Request): Promise<Response> {
 
     await db.from('lsi_runs').update({
       component_rationale:  narrative.component_rationale,
-      risk_heatmap:         narrative.risk_heatmap,
-      identified_strengths: narrative.identified_strengths,
-      risk_factors:         narrative.risk_factors,
-      intervention_plan:    narrative.intervention_plan,
-      peer_comparison:      narrative.peer_comparison,
-      target_state:         narrative.target_state,
+      diagnose_report:      narrative.diagnose_report,
     }).eq('id', run.id);
 
     return Response.json({ success: true, narrative });

@@ -9,16 +9,20 @@
 import { callAI, parseAIJson } from '../call';
 
 export interface SearchQuerySet {
-  core_identity:     string[];  // "[name]", "[name] [role]", "[name] [company]"
-  works_creative:    string[];  // specific titles from profile + inferred works
-  thought_leader:    string[];  // articles, talks, podcasts
-  platform_specific: string[];  // site:youtube.com, site:linkedin.com etc
-  media_mentions:    string[];  // "[name]" interview, "[name]" quotes
-  professional:      string[];  // awards, boards, investments, exits
-  social_discovery:  string[];  // channel searches
-  amazon_books:      string[];  // amazon author search
-  legal_regulatory:  string[];  // court, SEBI, MCA
-  crisis_signals:    string[];  // controversy, lawsuit
+  core_identity:       string[];  // "[name]", "[name] [role]", "[name] [company]"
+  works_creative:      string[];  // specific titles from profile + inferred works
+  thought_leader:      string[];  // articles, talks, podcasts
+  platform_specific:   string[];  // site:youtube.com, site:linkedin.com etc
+  media_mentions:      string[];  // "[name]" interview, "[name]" quotes
+  professional:        string[];  // awards, boards, investments, exits
+  social_discovery:    string[];  // channel searches
+  amazon_books:        string[];  // amazon author search
+  legal_regulatory:    string[];  // court, SEBI, MCA
+  crisis_signals:      string[];  // controversy, lawsuit, allegation
+  conference_speaking: string[];  // keynote, panel, conference appearances
+  academic_pubs:       string[];  // research, papers, citations
+  corporate_records:   string[];  // MCA, filings, directorship
+  domain_specific:     string[];  // industry-specific queries
 }
 
 export async function generateDeepSearchQueries(client: {
@@ -69,10 +73,30 @@ export async function generateDeepSearchQueries(client: {
 
   // ── STEP 4: AI generates broader discovery queries ─────────────────────────
   const result = await callAI({
-    systemPrompt: `You are a professional OSINT researcher generating exhaustive search queries to build a complete digital profile.
-Think like a journalist doing deep background research.
-CRITICAL: Return only REAL search strings — no placeholders, no descriptions, no "generate X more" text.
-Every item must be a string you would literally type into Google.
+    systemPrompt: `You are a professional OSINT researcher generating exhaustive search queries to build a complete digital footprint profile.
+
+Your mindset: investigative journalist, reputation intelligence analyst, due diligence researcher.
+
+Your task is to produce REAL search engine queries that a professional researcher would type directly into Google.
+Every item must be a literal search query string.
+
+QUERY DESIGN PRINCIPLES — use these patterns:
+• Quoted identity:     \"Full Name\"
+• Disambiguation:      \"Full Name\" company, \"Full Name\" industry, \"Full Name\" role
+• Title searches:      intitle:\"Full Name\", inurl:\"Full Name\"
+• Biography:           \"Full Name\" biography, \"Full Name\" background, \"Full Name\" profile
+• Media:               \"Full Name\" interview, \"Full Name\" featured, \"Full Name\" profile
+• Podcasts:            \"Full Name\" podcast guest, \"Full Name\" podcast
+• Speaking:            \"Full Name\" keynote, \"Full Name\" speaking, \"Full Name\" conference
+• Authority:           \"Full Name\" award, \"Full Name\" board, \"Full Name\" jury
+• Crisis (broad set):  \"Full Name\" controversy, allegation, fraud, scam, criticism, dispute, legal notice, regulator, SEBI, lawsuit, investigation
+
+CRITICAL RULES:
+• Every array item must be a real, literal search string
+• Never output: placeholders, descriptions, notes, sentences, brackets, or instructions
+• Bad:  "Generate more media searches"
+• Good: "\"John Smith\" interview Forbes"
+
 Return ONLY valid JSON.`,
     userPrompt: `Generate deep search queries for:
 
@@ -90,7 +114,7 @@ Focus on: media coverage, interviews, articles they've written, award nomination
 
 Return JSON:
 {
-  "core_identity": ["${client.name}", "${client.name} ${client.role ?? ''}", "${client.name} ${client.company ?? ''}", "\"${client.name}\" biography", "\"${client.name}\" profile"],
+  "core_identity": ["${client.name}", "${client.name} ${client.role ?? ''}", "${client.name} ${client.company ?? ''}", "\"${client.name}\" biography", "\"${client.name}\" background", "\"${client.name}\" profile", "intitle:\"${client.name}\""],
   "works_creative": ["5-8 queries for their creative works NOT already in the known titles list"],
   "thought_leader": ["\"${client.name}\" article", "\"${client.name}\" interview", "\"${client.name}\" op-ed", "\"${client.name}\" LinkedIn article", "\"${client.name}\" podcast guest", "\"${client.name}\" Medium", "\"${client.name}\" speaks"],
   "platform_specific": ["site:linkedin.com \"${client.name}\"", "site:medium.com \"${client.name}\"", "site:substack.com \"${client.name}\"", "site:instagram.com \"${client.name}\"", "site:twitter.com \"${client.name}\"", "2-3 more based on industry"],
@@ -99,7 +123,11 @@ Return JSON:
   "professional": ["\"${client.name}\" award", "\"${client.name}\" festival", "\"${client.name}\" nomination", "\"${client.name}\" jury"],
   "social_discovery": ["\"${client.name}\" Instagram", "\"${client.name}\" Twitter"],
   "legal_regulatory": ["\"${client.name}\" court", "\"${client.name}\" legal"],
-  "crisis_signals": ["\"${client.name}\" controversy", "\"${client.name}\" complaint"]
+  "crisis_signals": ["\"${client.name}\" controversy", "\"${client.name}\" allegation", "\"${client.name}\" fraud", "\"${client.name}\" scam", "\"${client.name}\" criticism", "\"${client.name}\" dispute", "\"${client.name}\" lawsuit", "\"${client.name}\" investigation", "\"${client.name}\" SEBI", "\"${client.name}\" regulator"],
+  "conference_speaking": ["\"${client.name}\" keynote", "\"${client.name}\" panel", "\"${client.name}\" conference", "\"${client.name}\" speaker", "4-5 conference-specific queries for their industry"],
+  "academic_pubs": ["\"${client.name}\" research", "\"${client.name}\" paper", "site:scholar.google.com \"${client.name}\"", "\"${client.name}\" citation"],
+  "corporate_records": ["\"${client.name}\" director", "site:mca.gov.in \"${client.name}\"", "\"${client.name}\" company registration"],
+  "domain_specific": ["3-6 queries specific to their industry and role that would uncover niche coverage"]
 }
 
 Replace ALL placeholder descriptions with ACTUAL query strings. Every item = real Google search string.`,
@@ -114,16 +142,20 @@ Replace ALL placeholder descriptions with ACTUAL query strings. Every item = rea
 
   // ── STEP 5: Merge AI queries with our deterministic ones ───────────────────
   return {
-    core_identity:     [...(aiQueries.core_identity    ?? [])],
-    works_creative:    [...knownWorkQueries, ...(aiQueries.works_creative ?? [])],
-    thought_leader:    [...(aiQueries.thought_leader   ?? [])],
-    platform_specific: [...youtubeQueries, ...(aiQueries.platform_specific ?? [])],
-    amazon_books:      [...(aiQueries.amazon_books     ?? [])],
-    media_mentions:    [...(aiQueries.media_mentions   ?? [])],
-    professional:      [...(aiQueries.professional     ?? [])],
-    social_discovery:  [...(aiQueries.social_discovery ?? [])],
-    legal_regulatory:  [...(aiQueries.legal_regulatory ?? [])],
-    crisis_signals:    [...(aiQueries.crisis_signals   ?? [])],
+    core_identity:       [...(aiQueries.core_identity    ?? [])],
+    works_creative:      [...knownWorkQueries, ...(aiQueries.works_creative ?? [])],
+    thought_leader:      [...(aiQueries.thought_leader   ?? [])],
+    platform_specific:   [...youtubeQueries, ...(aiQueries.platform_specific ?? [])],
+    amazon_books:        [...(aiQueries.amazon_books     ?? [])],
+    media_mentions:      [...(aiQueries.media_mentions   ?? [])],
+    professional:        [...(aiQueries.professional     ?? [])],
+    social_discovery:    [...(aiQueries.social_discovery ?? [])],
+    legal_regulatory:    [...(aiQueries.legal_regulatory ?? [])],
+    crisis_signals:      [...(aiQueries.crisis_signals   ?? [])],
+    conference_speaking: [...(aiQueries.conference_speaking ?? [])],
+    academic_pubs:       [...(aiQueries.academic_pubs    ?? [])],
+    corporate_records:   [...(aiQueries.corporate_records ?? [])],
+    domain_specific:     [...(aiQueries.domain_specific  ?? [])],
   };
 }
 
@@ -181,16 +213,20 @@ function extractTitlesFromProfile(bio: string, keywords: string[]): string[] {
  */
 export function flattenQuerySet(qs: SearchQuerySet): string[] {
   const ordered = [
-    ...(qs.core_identity     ?? []),
-    ...(qs.works_creative    ?? []),
-    ...(qs.platform_specific ?? []),
-    ...(qs.thought_leader    ?? []),
-    ...(qs.media_mentions    ?? []),
-    ...(qs.amazon_books      ?? []),
-    ...(qs.professional      ?? []),
-    ...(qs.social_discovery  ?? []),
-    ...(qs.legal_regulatory  ?? []),
-    ...(qs.crisis_signals    ?? []),
+    ...(qs.core_identity       ?? []),
+    ...(qs.works_creative      ?? []),
+    ...(qs.platform_specific   ?? []),
+    ...(qs.thought_leader      ?? []),
+    ...(qs.media_mentions      ?? []),
+    ...(qs.amazon_books        ?? []),
+    ...(qs.professional        ?? []),
+    ...(qs.conference_speaking ?? []),
+    ...(qs.domain_specific     ?? []),
+    ...(qs.social_discovery    ?? []),
+    ...(qs.academic_pubs       ?? []),
+    ...(qs.corporate_records   ?? []),
+    ...(qs.legal_regulatory    ?? []),
+    ...(qs.crisis_signals      ?? []),
   ];
 
   // Deduplicate while preserving priority order
