@@ -36,7 +36,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const { data: clientData } = await supabase
     .from('clients')
-    .select('name, company, role, industry, linkedin_url, keywords')
+    .select('name, company, role, industry, linkedin_url, keywords, social_links')
     .eq('id', clientId)
     .single();
 
@@ -49,6 +49,7 @@ export async function POST(request: Request): Promise<Response> {
     industry: clientData.industry,
     linkedin_url: clientData.linkedin_url,
     keywords: clientData.keywords,
+    social_links: clientData.social_links,
   };
 
   const admin = createAdminClient();

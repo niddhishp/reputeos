@@ -103,22 +103,38 @@ export default function DiagnosePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll for narrative if not ready yet (AI generates async after LSI save)
+  // Trigger narrative generation if not ready — calls agent system directly
   useEffect(() => {
-    if (narrativeReady || !lsi || pollCount >= 8) return;
-    const t = setTimeout(async () => {
-      const { data } = await supabase.from('lsi_runs')
+    if (narrativeReady || !lsi || pollCount >= 1) return;
+    setPollCount(1);
+    (async () => {
+      // First check if it already exists (e.g. from a previous run)
+      const { data: existing } = await supabase.from('lsi_runs')
         .select('component_rationale,risk_heatmap,identified_strengths,risk_factors,intervention_plan,peer_comparison,target_state')
         .eq('id', lsi.id as string).single();
-      if (data?.component_rationale) {
-        setLsi(prev => prev ? {...prev, ...data} : prev);
+      if (existing?.component_rationale) {
+        setLsi(prev => prev ? {...prev, ...existing} : prev);
         setNarrativeReady(true);
-      } else {
-        setPollCount(p => p+1);
+        return;
       }
-    }, 4000);
-    return () => clearTimeout(t);
-  }, [narrativeReady, lsi, pollCount]);
+      // Trigger agent-based narrative generation
+      try {
+        const res = await fetch('/api/lsi/narrative', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, lsiRunId: lsi.id }),
+          signal: AbortSignal.timeout(270_000),
+        });
+        const data = await res.json() as { success?: boolean; narrative?: Record<string, unknown>; error?: string };
+        if (data.success && data.narrative) {
+          setLsi(prev => prev ? { ...prev, ...data.narrative } : prev);
+          setNarrativeReady(true);
+        }
+      } catch (e) {
+        console.error('[Diagnose] Narrative generation failed:', e);
+      }
+    })();
+  }, [narrativeReady, lsi, pollCount, clientId]);
 
   async function runLSI() {
     setCalculating(true); setError(''); setNarrativeReady(false); setPollCount(0);

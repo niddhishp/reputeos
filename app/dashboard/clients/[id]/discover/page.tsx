@@ -1019,6 +1019,33 @@ export default function DiscoverPage() {
           {error && <p style={{ color: '#f87171', marginTop: 12, fontSize: 13 }}>{error}</p>}
         </div>
       )}
+
+      {/* ── Flow Progression CTA ──────────────────────────────────────── */}
+      {discoveryReport && (
+        <div style={{
+          marginTop: 40, padding: '32px 36px',
+          background: 'linear-gradient(135deg, rgba(201,168,76,0.08) 0%, rgba(8,12,20,0) 100%)',
+          border: `1px solid ${GOLD}30`, borderRadius: 20,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: 20,
+        }}>
+          <div>
+            <div style={{ fontSize: 10, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Discovery Complete — What's Next?</div>
+            <h3 style={{ fontSize: 20, fontWeight: 800, color: 'white', margin: 0, marginBottom: 6 }}>Diagnose Your Reputation Score</h3>
+            <p style={{ fontSize: 13, color: MUTED, margin: 0, maxWidth: 480 }}>
+              Your digital footprint is mapped across 62 sources. Now calculate your LSI score — a precise measure of your reputation strength across 6 dimensions.
+            </p>
+          </div>
+          <a href={`/dashboard/clients/${clientId}/diagnose`} style={{
+            padding: '14px 28px', background: GOLD, color: '#080C14',
+            fontWeight: 800, fontSize: 14, borderRadius: 10, border: 'none',
+            cursor: 'pointer', textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+          }}>
+            Calculate My LSI Score →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

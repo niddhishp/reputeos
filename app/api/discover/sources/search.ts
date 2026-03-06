@@ -6,6 +6,7 @@
  */
 
 import { SourceResult, SourceModuleResult, ClientProfile, buildSearchQuery, isRelevant } from './types';
+import { generateDeepSearchQueries, flattenQuerySet } from '@/lib/ai/agents/query-generator';
 
 
 
@@ -241,57 +242,90 @@ async function perplexitySynthesis(client: ClientProfile): Promise<SourceResult[
 export async function fetchSearchSources(client: ClientProfile): Promise<SourceModuleResult> {
   const start = Date.now();
   const errors: string[] = [];
-  const q = buildSearchQuery(client);
-  const qIndia = `${q} India`;
-
-  const [
-    googleWeb,
-    googleNews,
-    googleScholar,
-    bingNews,
-    youtube,
-    wikipedia,
-    hackerNews,
-    semanticScholar,
-    exa,
-    perplexity,
-  ] = await Promise.allSettled([
-    serpSearch({ engine: 'google', q: qIndia, gl: 'in', hl: 'en', num: '10' }, 'Google Web', 'search', client, 10),
-    serpSearch({ engine: 'google', q: qIndia, gl: 'in', tbm: 'nws', num: '8' }, 'Google News', 'news', client, 8),
-    serpSearch({ engine: 'google_scholar', q: q, num: '5' }, 'Google Scholar', 'academic', client, 5),
-    serpSearch({ engine: 'bing_news', q: qIndia, count: '8' }, 'Bing India News', 'news', client, 8),
-    serpSearch({ engine: 'youtube', search_query: qIndia }, 'YouTube Search', 'video', client, 5),
-    wikipediaSearch(client.name),
-    hackerNewsSearch(client.name),
-    semanticScholarSearch(client.name),
-    exaSearch(`${client.name} ${client.company ?? ''} reputation India`, 8, 'search'),
-    perplexitySynthesis(client),
-  ]);
-
   const allResults: SourceResult[] = [];
-  const tasks = [
-    { name: 'Google Web', r: googleWeb },
-    { name: 'Google News', r: googleNews },
-    { name: 'Google Scholar', r: googleScholar },
-    { name: 'Bing India News', r: bingNews },
-    { name: 'YouTube', r: youtube },
-    { name: 'Wikipedia', r: wikipedia },
-    { name: 'Hacker News', r: hackerNews },
-    { name: 'Semantic Scholar', r: semanticScholar },
-    { name: 'Exa Neural', r: exa },
-    { name: 'Perplexity', r: perplexity },
-  ];
 
-  for (const { name, r } of tasks) {
-    if (r.status === 'fulfilled') allResults.push(...r.value);
-    else errors.push(`${name}: ${r.reason?.message ?? 'failed'}`);
+  // ── Step 1: Generate deep, persona-specific search queries ────────────────
+  let deepQueries: string[] = [];
+  try {
+    const querySet = await generateDeepSearchQueries({
+      name:         client.name,
+      role:         client.role         ?? undefined,
+      company:      client.company      ?? undefined,
+      industry:     client.industry     ?? undefined,
+      keywords:     client.keywords     ?? undefined,
+      social_links: client.social_links ?? undefined,
+    });
+    deepQueries = flattenQuerySet(querySet);
+    console.log(`[Search] Generated ${deepQueries.length} deep queries for ${client.name}`);
+  } catch (e) {
+    // Fallback to basic query
+    const q = buildSearchQuery(client);
+    deepQueries = [q, `${q} India`, `${q} interview`, `${q} books`, `${q} YouTube`];
+    errors.push(`Query generation failed: ${e instanceof Error ? e.message : String(e)}`);
   }
+
+  // ── Step 2: Always-run enrichment sources (Wikipedia, Perplexity, Exa) ───
+  const [wikipedia, perplexity, exa] = await Promise.allSettled([
+    wikipediaSearch(client.name),
+    perplexitySynthesis(client),
+    exaSearch(`${client.name} ${client.company ?? ''} India reputation works career`, 10, 'search'),
+  ]);
+  if (wikipedia.status  === 'fulfilled') allResults.push(...wikipedia.value);
+  else errors.push(`Wikipedia: ${wikipedia.reason?.message}`);
+  if (perplexity.status === 'fulfilled') allResults.push(...perplexity.value);
+  else errors.push(`Perplexity: ${perplexity.reason?.message}`);
+  if (exa.status        === 'fulfilled') allResults.push(...exa.value);
+  else errors.push(`Exa: ${exa.reason?.message}`);
+
+  // ── Step 3: Run deep queries in batches of 6 (SerpAPI rate limits) ────────
+  // Priority queries first (core identity, then works, then platform)
+  const BATCH_SIZE = 6;
+  const MAX_QUERIES = 30; // cap to stay within rate limits
+  const priorityQueries = deepQueries.slice(0, MAX_QUERIES);
+
+  for (let i = 0; i < priorityQueries.length; i += BATCH_SIZE) {
+    const batch = priorityQueries.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map(q => serpSearch(
+        { engine: 'google', q, gl: 'in', hl: 'en', num: '8' },
+        'Google Web',
+        detectQueryCategory(q),
+        client,
+        8
+      ))
+    );
+    for (const r of batchResults) {
+      if (r.status === 'fulfilled') allResults.push(...r.value);
+    }
+  }
+
+  // ── Step 4: Deduplicate by URL ─────────────────────────────────────────────
+  const seen = new Set<string>();
+  const dedupedResults = allResults.filter(r => {
+    if (!r.url || seen.has(r.url)) return false;
+    seen.add(r.url);
+    return true;
+  });
 
   return {
     module: 'Search & AI Intelligence',
-    results: allResults,
-    sourcesScanned: 11,
+    results: dedupedResults,
+    sourcesScanned: priorityQueries.length + 3, // queries + wiki + perplexity + exa
     errors,
     durationMs: Date.now() - start,
   };
+}
+
+/**
+ * Detect category from query string for better classification
+ */
+function detectQueryCategory(q: string): string {
+  const lower = q.toLowerCase();
+  if (lower.includes('youtube') || lower.includes('video') || lower.includes('podcast')) return 'video';
+  if (lower.includes('amazon') || lower.includes('book') || lower.includes('author')) return 'publication';
+  if (lower.includes('linkedin') || lower.includes('twitter') || lower.includes('instagram')) return 'social';
+  if (lower.includes('court') || lower.includes('sebi') || lower.includes('legal') || lower.includes('mca')) return 'regulatory';
+  if (lower.includes('award') || lower.includes('board') || lower.includes('director')) return 'professional';
+  if (lower.includes('interview') || lower.includes('news')) return 'news';
+  return 'search';
 }

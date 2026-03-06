@@ -22,6 +22,7 @@ export interface ClientProfile {
   industry: string | null;
   linkedin_url: string | null;
   keywords: string[] | null;
+  social_links?: Record<string, string> | null;
 }
 
 export interface SourceModuleResult {

@@ -111,7 +111,12 @@ export default function ClientsPage() {
 
     const { data: profile } = await supabase.from('user_profiles').select('name, role, plan').eq('id', user.id).single();
     const role = profile?.role ?? user.user_metadata?.role ?? 'individual';
-    setUserProfile({ name: profile?.name ?? user.user_metadata?.name ?? 'there', role, plan: profile?.plan ?? 'individual' });
+    const resolvedName = profile?.name
+      ?? user.user_metadata?.full_name
+      ?? user.user_metadata?.name
+      ?? user.email?.split('@')[0]
+      ?? 'there';
+    setUserProfile({ name: resolvedName, role, plan: profile?.plan ?? 'individual' });
 
     // Show wizard only on first visit (no clients yet)
     const { data: existingClients } = await supabase.from('clients').select('*').order('updated_at', { ascending: false });
