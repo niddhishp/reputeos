@@ -19,6 +19,32 @@ const MUTED  = 'rgba(255,255,255,0.35)';
 const DIM    = 'rgba(255,255,255,0.07)';
 const TEXT   = 'rgba(255,255,255,0.65)';
 
+/**
+ * safeStr — prevent React error #31 "Objects are not valid as a React child"
+ *
+ * The AI sometimes returns objects like {url, type, title, publication}
+ * instead of plain strings. This utility extracts the best human-readable
+ * string from any value, so it is always safe to render.
+ *
+ * Usage: {safeStr(value)}  — use everywhere instead of {value} for AI data
+ */
+function safeStr(value: unknown, fallback = ''): string {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    // Try common string fields in priority order
+    for (const key of ['title', 'name', 'headline', 'label', 'text', 'content',
+                       'publication', 'source', 'description', 'summary', 'url']) {
+      if (typeof obj[key] === 'string' && obj[key]) return obj[key] as string;
+    }
+    // Last resort: stringify but strip quotes
+    try { return JSON.stringify(value).slice(0, 120); } catch { return fallback; }
+  }
+  return String(value ?? fallback);
+}
+
 // ── Shared primitives ──────────────────────────────────────────────────────
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
@@ -167,9 +193,9 @@ function S2_ProfessionalBackground({ r }: { r: DiscoveryReport }) {
               <div style={{ position: 'absolute', left: -24, top: 4, width: 14, height: 14, borderRadius: '50%', border: `2px solid ${GOLD}`, background: CARD, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD }} />
               </div>
-              <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, marginBottom: 3 }}>{t.year}</div>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 600, marginBottom: 2 }}>{t.milestone}</div>
-              <div style={{ fontSize: 12, color: MUTED }}>{t.significance}</div>
+              <div style={{ fontSize: 11, color: GOLD, fontWeight: 700, marginBottom: 3 }}>{safeStr(t.year)}</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 600, marginBottom: 2 }}>{safeStr(t.milestone)}</div>
+              <div style={{ fontSize: 12, color: MUTED }}>{safeStr(t.significance)}</div>
             </div>
           ))}
         </div>
@@ -181,7 +207,7 @@ function S2_ProfessionalBackground({ r }: { r: DiscoveryReport }) {
             {(pb.key_achievements ?? []).map((a, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                 <Award size={12} color={GOLD} style={{ flexShrink: 0, marginTop: 2 }} />
-                <span style={{ fontSize: 12, color: TEXT }}>{a}</span>
+                <span style={{ fontSize: 12, color: TEXT }}>{safeStr(a)}</span>
               </div>
             ))}
           </div>
@@ -197,7 +223,7 @@ function S2_ProfessionalBackground({ r }: { r: DiscoveryReport }) {
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 6 }}>Awards & Recognition</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {(pb.awards_recognition ?? []).map((a, i) => (
-              <span key={i} style={{ fontSize: 12, color: TEXT }}>· {a}</span>
+              <span key={i} style={{ fontSize: 12, color: TEXT }}>· {safeStr(a)}</span>
             ))}
           </div>
         </div>
@@ -231,9 +257,9 @@ function S3_RecentDevelopments({ r }: { r: DiscoveryReport }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {rd.news_items.map((n, i) => (
               <div key={i} style={{ background: DIM, borderRadius: 8, padding: '12px 14px' }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)', marginBottom: 3 }}>{n.headline}</div>
-                <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>{n.source}</div>
-                <div style={{ fontSize: 11, color: TEXT }}>{n.significance}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)', marginBottom: 3 }}>{safeStr(n.headline)}</div>
+                <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>{safeStr(n.source)}</div>
+                <div style={{ fontSize: 11, color: TEXT }}>{safeStr(n.significance)}</div>
               </div>
             ))}
           </div>
@@ -363,7 +389,7 @@ function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
               <div style={{ fontSize: 10, color: '#f87171', marginBottom: 5 }}>Currently Associated With</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {(mf.media_language?.frequent_descriptors ?? []).map((d, i) => (
-                  <span key={i} style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', fontSize: 11, color: '#f87171', fontStyle: 'italic' }}>"{d}"</span>
+                  <span key={i} style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', fontSize: 11, color: '#f87171', fontStyle: 'italic' }}>"{safeStr(d)}"</span>
                 ))}
               </div>
             </div>
@@ -371,7 +397,7 @@ function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
               <div style={{ fontSize: 10, color: '#4ade80', marginBottom: 5 }}>Should Be Associated With</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {(mf.media_language?.rare_descriptors ?? []).map((d, i) => (
-                  <span key={i} style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)', fontSize: 11, color: '#4ade80' }}>{d}</span>
+                  <span key={i} style={{ padding: '3px 8px', borderRadius: 4, background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)', fontSize: 11, color: '#4ade80' }}>{safeStr(d)}</span>
                 ))}
               </div>
             </div>
@@ -412,10 +438,7 @@ function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
   const thoughtLeadershipItems = [
     { label: 'Conference Participation', items: s.conference_participation, icon: Users },
     { label: 'Speaking Engagements',     items: s.speaking_engagements,     icon: MessageSquare },
-    { label: 'Op-eds / Articles',        items: s.op_eds,                   icon: FileText },
-    { label: 'Speaking Engagements',     items: s.speaking_engagements,      icon: Radio },
-    { label: 'Conference Participation', items: s.conference_participation,  icon: Radio },
-    { label: 'Op-Eds & Articles',        items: s.op_eds,                    icon: Award },
+    { label: 'Op-Eds & Articles',        items: s.op_eds,                   icon: FileText },
   ] as const;
 
   return (
@@ -479,20 +502,9 @@ function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
               <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {(items ?? []).map((item, i) => {
-                // AI sometimes returns objects {url, type, title, publication} instead of strings
-                const text = typeof item === 'string'
-                  ? item
-                  : typeof item === 'object' && item !== null
-                    ? (item as Record<string,string>).title
-                      || (item as Record<string,string>).publication
-                      || (item as Record<string,string>).url
-                      || JSON.stringify(item)
-                    : String(item ?? '');
-                return (
-                  <span key={i} style={{ fontSize: 12, color: TEXT }}>{text}</span>
-                );
-              })}
+              {(items ?? []).map((item, i) => (
+                <span key={i} style={{ fontSize: 12, color: TEXT }}>{safeStr(item)}</span>
+              ))}
             </div>
           </div>
         ))}
@@ -681,8 +693,8 @@ function S10_ReputationDiagnosis({ r }: { r: DiscoveryReport }) {
           </div>
           {(rd.vulnerabilities ?? []).map((v, i) => (
             <div key={i} style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: 8, padding: '11px 14px', marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#f87171', marginBottom: 4 }}>{v.title}</div>
-              <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.55 }}>{v.description}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#f87171', marginBottom: 4 }}>{safeStr(v.title)}</div>
+              <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.55 }}>{safeStr(v.description)}</div>
             </div>
           ))}
         </div>
@@ -1039,7 +1051,7 @@ export default function DiscoverPage() {
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
             {['Profile & Background', 'Search Identity', 'Media Framing', 'Peer Analysis', 'Risk Assessment'].map((s, i) => (
-              <span key={i} style={{ padding: '4px 10px', borderRadius: 12, fontSize: 11, background: `${GOLD}10`, border: `1px solid ${GOLD}25`, color: `${GOLD}80`, animation: `pulse ${1.2 + i * 0.2}s ease-in-out infinite` }}>{s}</span>
+              <span key={i} style={{ padding: '4px 10px', borderRadius: 12, fontSize: 11, background: `${GOLD}10`, border: `1px solid ${GOLD}25`, color: `${GOLD}80`, animation: `pulse ${1.2 + i * 0.2}s ease-in-out infinite` }}>{safeStr(s)}</span>
             ))}
           </div>
           {error && <p style={{ color: '#f87171', marginTop: 20, fontSize: 13 }}>{error}</p>}
