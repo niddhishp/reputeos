@@ -64,6 +64,8 @@ export async function POST(request: Request): Promise<Response> {
       target_influencers: (result.targetInfluencers as unknown[]) ?? [],
       root_cause_insights: (result.rootCauseInsights as string[]) ?? [],
       strategic_insights: (result.strategicInsights as string[]) ?? [],
+      archetype_reveal: (result.archetypeReveal as Record<string, unknown>) ?? {},
+      alternate_archetype: (result.alternatePersonal as Record<string, unknown>) ?? {},
       updated_at: new Date().toISOString(),
     }, { onConflict: 'client_id' });
 
@@ -146,13 +148,57 @@ Return ONLY valid JSON:
   ],
   "signatureLines": ["Identity statement","Value proposition","Differentiation","Mission","Legacy statement"],
   "rootCauseInsights": ["Gap 1 and cause","Gap 2 and cause","Gap 3 and cause"],
-  "strategicInsights": ["Recommendation 1","Recommendation 2","Recommendation 3"]
+  "strategicInsights": ["Recommendation 1","Recommendation 2","Recommendation 3"],
+  "archetypeReveal": {
+    "why_this_archetype": [
+      {"reason": "Specific reason 1 citing their actual data", "evidence": "What in their profile proves this"},
+      {"reason": "Specific reason 2", "evidence": "Evidence"},
+      {"reason": "Specific reason 3", "evidence": "Evidence"},
+      {"reason": "Specific reason 4", "evidence": "Evidence"},
+      {"reason": "Specific reason 5", "evidence": "Evidence"}
+    ],
+    "archetype_strengths": [
+      {"title": "Strength name", "description": "2 sentences: what this enables and why it matters for their specific industry"}
+    ],
+    "archetype_shadows": [
+      {"title": "Shadow/blind spot name", "description": "2 sentences: the Jungian shadow of this archetype — what to watch for"}
+    ],
+    "named_leaders": [
+      {"name": "Real leader name e.g. Ratan Tata", "domain": "Their industry/field", "archetype_expression": "How they express this archetype", "what_to_emulate": "Specific trait to model"},
+      {"name": "Second real leader", "domain": "field", "archetype_expression": "expression", "what_to_emulate": "trait"},
+      {"name": "Third real leader", "domain": "field", "archetype_expression": "expression", "what_to_emulate": "trait"},
+      {"name": "Global example (non-Indian)", "domain": "field", "archetype_expression": "expression", "what_to_emulate": "trait"}
+    ],
+    "cautionary_tales": [
+      {"name": "Real person name", "what_happened": "Specific description of their reputation collapse", "archetype_failure": "How they violated their archetype", "lesson": "One-sentence lesson for this archetype"},
+      {"name": "Second cautionary tale", "what_happened": "description", "archetype_failure": "failure", "lesson": "lesson"}
+    ],
+    "peer_lsi_comparison": [
+      {"name": "Named peer in same industry", "role": "their role", "estimated_lsi": 72, "visibility": "High", "archetype": "their archetype"},
+      {"name": "Second peer", "role": "role", "estimated_lsi": 68, "visibility": "Medium", "archetype": "archetype"},
+      {"name": "Third peer", "role": "role", "estimated_lsi": 81, "visibility": "High", "archetype": "archetype"},
+      {"name": "Fourth peer", "role": "role", "estimated_lsi": 55, "visibility": "Low", "archetype": "archetype"}
+    ],
+    "peer_average_lsi": 69,
+    "transition_success": {
+      "name": "Real executive name", "industry": "their industry",
+      "before": "Their reputation state before SRE/positioning work",
+      "after": "What changed and the specific outcomes (followers, media, business impact)",
+      "how_long": "Timeframe", "key_move": "The single most important thing they did"
+    },
+    "transition_failure": {
+      "name": "Real executive name", "industry": "their industry",
+      "what_happened": "Specific reputation collapse or missed opportunity",
+      "root_cause": "Why reputation neglect caused this",
+      "consequence": "Business/personal impact", "lesson": "What they should have done"
+    }
+  }
 }`;
 
   const aiResult = await callAI({
     systemPrompt,
     userPrompt: `Assign archetypes and positioning for:\n${JSON.stringify(clientProfile, null, 2)}`,
-    maxTokens: 2000,
+    maxTokens: 4000,
     temperature: 0.4,
     json: true,
     timeoutMs: 50_000,

@@ -1,0 +1,770 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'next/navigation';
+import {
+  Sparkles, RefreshCw, AlertTriangle, Star, TrendingUp,
+  TrendingDown, Shield, Crown, Eye, Zap, BookOpen,
+  Users, ArrowRight, CheckCircle, Copy, ChevronDown,
+  ChevronUp, Award, AlertCircle, Target, BarChart3,
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
+
+const GOLD   = '#C9A84C';
+const DARK   = '#080C14';
+const CARD   = '#0d1117';
+const CARD2  = '#111827';
+const BORDER = 'rgba(201,168,76,0.15)';
+const MUTED  = 'rgba(255,255,255,0.38)';
+const TEXT   = 'rgba(255,255,255,0.75)';
+
+// ── Archetype visual config ────────────────────────────────────────────────────
+const ARCHETYPE_CONFIG: Record<string, {
+  icon: string; color: string; secondColor: string;
+  tagline: string; essence: string;
+}> = {
+  sage:      { icon: '🦉', color: '#818cf8', secondColor: '#6366f1', tagline: 'The Keeper of Wisdom',        essence: 'Truth through insight' },
+  hero:      { icon: '⚔️', color: '#f59e0b', secondColor: '#d97706', tagline: 'The Courageous Champion',     essence: 'Courage through adversity' },
+  explorer:  { icon: '🧭', color: '#34d399', secondColor: '#10b981', tagline: 'The Fearless Trailblazer',    essence: 'Freedom through discovery' },
+  rebel:     { icon: '🔥', color: '#ef4444', secondColor: '#dc2626', tagline: 'The Revolutionary Disruptor', essence: 'Change through defiance' },
+  magician:  { icon: '✨', color: '#a78bfa', secondColor: '#8b5cf6', tagline: 'The Transformative Visionary',essence: 'Power through transformation' },
+  caregiver: { icon: '🤲', color: '#fb7185', secondColor: '#f43f5e', tagline: 'The Empowering Protector',    essence: 'Strength through service' },
+  creator:   { icon: '🎨', color: '#60a5fa', secondColor: '#3b82f6', tagline: 'The Imaginative Innovator',   essence: 'Impact through creation' },
+  ruler:     { icon: '👑', color: '#fbbf24', secondColor: '#f59e0b', tagline: 'The Commanding Authority',    essence: 'Order through leadership' },
+  jester:    { icon: '🎭', color: '#f472b6', secondColor: '#ec4899', tagline: 'The Disarming Entertainer',   essence: 'Joy through authenticity' },
+  lover:     { icon: '💫', color: '#f9a8d4', secondColor: '#f472b6', tagline: 'The Passionate Connector',    essence: 'Connection through passion' },
+  everyman:  { icon: '🤝', color: '#6ee7b7', secondColor: '#34d399', tagline: 'The Relatable Unifier',       essence: 'Trust through belonging' },
+  innocent:  { icon: '🌟', color: '#fde68a', secondColor: '#fcd34d', tagline: 'The Optimistic Pioneer',      essence: 'Happiness through purity' },
+  default:   { icon: '⭐', color: GOLD,      secondColor: '#b8930a', tagline: 'The Strategic Leader',        essence: 'Impact through vision' },
+};
+
+function getArchConfig(name: string) {
+  const key = name?.toLowerCase().replace(/the\s+/i, '').trim().split(' ')[0] ?? 'default';
+  return ARCHETYPE_CONFIG[key] ?? ARCHETYPE_CONFIG.default;
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function Pill({ children, color = GOLD }: { children: React.ReactNode; color?: string }) {
+  return (
+    <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+      background: `${color}15`, border: `1px solid ${color}35`, color }}>
+      {children}
+    </span>
+  );
+}
+
+function SectionTitle({ children, sub }: { children: React.ReactNode; sub?: string }) {
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, color: 'white', margin: 0, marginBottom: sub ? 5 : 0 }}>{children}</h2>
+      {sub && <p style={{ fontSize: 13, color: MUTED, margin: 0 }}>{sub}</p>}
+    </div>
+  );
+}
+
+// ── SECTION 1: Hero Reveal ─────────────────────────────────────────────────────
+function ArchetypeHeroReveal({ positioning, clientName, lsiScore }: {
+  positioning: Record<string, unknown>; clientName: string; lsiScore: number;
+}) {
+  const archName = positioning.personal_archetype as string ?? 'The Sage';
+  const bizArch  = positioning.business_archetype as string | null;
+  const conf     = (positioning.archetype_confidence as number) ?? 75;
+  const cfg      = getArchConfig(archName);
+  const followScore = (positioning.followability_score as number) ?? 70;
+
+  const reveal = (positioning.archetype_reveal ?? positioning.archetypeReveal ?? {}) as Record<string, unknown>;
+  const peerAvgLsi = (reveal.peer_average_lsi as number) ?? 69;
+  const gap = peerAvgLsi - lsiScore;
+
+  return (
+    <div style={{
+      position: 'relative', overflow: 'hidden',
+      borderRadius: 24,
+      background: `linear-gradient(135deg, ${cfg.color}12 0%, ${DARK} 60%, ${cfg.secondColor}08 100%)`,
+      border: `1px solid ${cfg.color}30`,
+      padding: '48px 40px 40px',
+      marginBottom: 24,
+    }}>
+      {/* Background glow */}
+      <div style={{ position: 'absolute', top: -80, right: -80, width: 320, height: 320,
+        borderRadius: '50%', background: `${cfg.color}08`, filter: 'blur(60px)', pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', display: 'flex', gap: 40, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+
+        {/* Left: Identity */}
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ fontSize: 11, color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: 12, fontWeight: 700 }}>
+            Your Reputation Archetype
+          </div>
+          <div style={{ fontSize: 64, marginBottom: 4, lineHeight: 1 }}>{cfg.icon}</div>
+          <h1 style={{ fontSize: 44, fontWeight: 900, color: 'white', margin: '12px 0 4px', lineHeight: 1.1 }}>
+            {archName}
+          </h1>
+          <p style={{ fontSize: 16, color: cfg.color, fontWeight: 600, margin: '0 0 8px' }}>{cfg.tagline}</p>
+          <p style={{ fontSize: 13, color: TEXT, fontStyle: 'italic', margin: '0 0 20px' }}>&ldquo;{cfg.essence}&rdquo;</p>
+
+          {bizArch && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+              background: 'rgba(255,255,255,0.05)', borderRadius: 10, border: `1px solid ${BORDER}` }}>
+              <span style={{ fontSize: 12, color: MUTED }}>Business Archetype:</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{bizArch}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Score trio */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 200 }}>
+          {/* Confidence */}
+          <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: '20px 24px',
+            border: `1px solid ${cfg.color}25`, textAlign: 'center' }}>
+            <div style={{ fontSize: 40, fontWeight: 900, color: cfg.color, lineHeight: 1 }}>{conf}%</div>
+            <div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 4 }}>Archetype Confidence</div>
+          </div>
+          {/* Followability */}
+          <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: '20px 24px',
+            border: `1px solid rgba(255,255,255,0.08)`, textAlign: 'center' }}>
+            <div style={{ fontSize: 40, fontWeight: 900, color: followScore >= 70 ? '#4ade80' : followScore >= 55 ? GOLD : '#fb923c', lineHeight: 1 }}>{followScore}%</div>
+            <div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 4 }}>Followability Score</div>
+          </div>
+          {/* LSI vs peers */}
+          {gap !== 0 && (
+            <div style={{ background: gap > 0 ? 'rgba(251,146,60,0.08)' : 'rgba(74,222,128,0.08)',
+              borderRadius: 16, padding: '14px 20px', border: `1px solid ${gap > 0 ? '#fb923c' : '#4ade80'}25`, textAlign: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                {gap > 0 ? <TrendingDown size={16} color="#fb923c" /> : <TrendingUp size={16} color="#4ade80" />}
+                <span style={{ fontSize: 22, fontWeight: 900, color: gap > 0 ? '#fb923c' : '#4ade80' }}>
+                  {gap > 0 ? '-' : '+'}{Math.abs(gap)} pts
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>vs Peer Average ({peerAvgLsi})</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SECTION 2: Why This Archetype ──────────────────────────────────────────────
+function WhyThisArchetype({ reveal }: { reveal: Record<string, unknown> }) {
+  const reasons = (reveal.why_this_archetype as Array<{ reason: string; evidence: string }>) ?? [];
+  if (!reasons.length) return null;
+
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '32px 36px', marginBottom: 20 }}>
+      <SectionTitle sub="5 data-backed reasons why this archetype fits your profile exactly">
+        Why You Are This Archetype
+      </SectionTitle>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {reasons.map((r, i) => (
+          <div key={i} style={{ display: 'flex', gap: 16, alignItems: 'flex-start',
+            padding: '16px 20px', background: CARD2, borderRadius: 12,
+            border: `1px solid rgba(255,255,255,0.06)`,
+            transition: 'border-color 0.2s' }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: `${GOLD}20`,
+              border: `2px solid ${GOLD}40`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, fontSize: 12, fontWeight: 900, color: GOLD }}>
+              {i + 1}
+            </div>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 700, color: 'white', margin: '0 0 5px', lineHeight: 1.4 }}>{r.reason}</p>
+              <p style={{ fontSize: 12, color: MUTED, margin: 0, lineHeight: 1.6 }}>
+                <span style={{ color: `${GOLD}80`, fontWeight: 600 }}>Evidence: </span>{r.evidence}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── SECTION 3: Strengths & Shadows ─────────────────────────────────────────────
+function StrengthsAndShadows({ reveal, archName }: { reveal: Record<string, unknown>; archName: string }) {
+  const strengths = (reveal.archetype_strengths as Array<{ title: string; description: string }>) ?? [];
+  const shadows   = (reveal.archetype_shadows   as Array<{ title: string; description: string }>) ?? [];
+  if (!strengths.length && !shadows.length) return null;
+
+  const cfg = getArchConfig(archName);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+      {/* Strengths */}
+      <div style={{ background: `${cfg.color}08`, border: `1px solid ${cfg.color}25`, borderRadius: 20, padding: '28px 28px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: `${cfg.color}20`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Zap size={16} color={cfg.color} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 800, color: 'white', margin: 0 }}>Archetype Strengths</h3>
+            <p style={{ fontSize: 11, color: MUTED, margin: 0 }}>What this archetype empowers</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {strengths.map((s, i) => (
+            <div key={i}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                <CheckCircle size={12} color={cfg.color} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{s.title}</span>
+              </div>
+              <p style={{ fontSize: 12, color: TEXT, margin: 0, lineHeight: 1.6, paddingLeft: 19 }}>{s.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Shadows (Jungian) */}
+      <div style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 20, padding: '28px 28px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(239,68,68,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Eye size={16} color="#f87171" />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 800, color: 'white', margin: 0 }}>Archetype Shadows</h3>
+            <p style={{ fontSize: 11, color: MUTED, margin: 0 }}>Jungian blind spots to watch</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {shadows.map((s, i) => (
+            <div key={i}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                <AlertCircle size={12} color="#f87171" />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{s.title}</span>
+              </div>
+              <p style={{ fontSize: 12, color: TEXT, margin: 0, lineHeight: 1.6, paddingLeft: 19 }}>{s.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SECTION 4: Named Leaders ───────────────────────────────────────────────────
+function NamedLeaders({ reveal, archName }: { reveal: Record<string, unknown>; archName: string }) {
+  const leaders = (reveal.named_leaders as Array<{
+    name: string; domain: string; archetype_expression: string; what_to_emulate: string;
+  }>) ?? [];
+  if (!leaders.length) return null;
+
+  const cfg = getArchConfig(archName);
+  const initials = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '32px 36px', marginBottom: 20 }}>
+      <SectionTitle sub={`Real leaders who built their authority as ${archName}s — study their playbook`}>
+        Next-Gen Leaders in Your Archetype
+      </SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+        {leaders.map((l, i) => (
+          <div key={i} style={{ background: CARD2, borderRadius: 16, padding: '20px 20px',
+            border: `1px solid rgba(255,255,255,0.07)`,
+            transition: 'border-color 0.2s, transform 0.2s' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+                background: `linear-gradient(135deg, ${cfg.color}40, ${cfg.secondColor}20)`,
+                border: `2px solid ${cfg.color}50`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, fontWeight: 900, color: cfg.color }}>
+                {initials(l.name)}
+              </div>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 800, color: 'white', margin: 0 }}>{l.name}</p>
+                <p style={{ fontSize: 11, color: MUTED, margin: 0 }}>{l.domain}</p>
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: TEXT, margin: '0 0 10px', lineHeight: 1.6 }}>{l.archetype_expression}</p>
+            <div style={{ padding: '8px 12px', background: `${GOLD}08`, borderRadius: 8, border: `1px solid ${GOLD}20` }}>
+              <span style={{ fontSize: 11, color: GOLD, fontWeight: 600 }}>Model: </span>
+              <span style={{ fontSize: 11, color: TEXT }}>{l.what_to_emulate}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── SECTION 5: Comparative LSI (FOMO table) ────────────────────────────────────
+function PeerLSIComparison({ reveal, lsiScore }: { reveal: Record<string, unknown>; lsiScore: number }) {
+  const peers = (reveal.peer_lsi_comparison as Array<{
+    name: string; role: string; estimated_lsi: number; visibility: string; archetype: string;
+  }>) ?? [];
+  const peerAvg = (reveal.peer_average_lsi as number) ?? 0;
+  if (!peers.length) return null;
+
+  const allScores = [...peers.map(p => p.estimated_lsi), lsiScore];
+  const max = Math.max(...allScores);
+
+  const visColor = (v: string) => v === 'High' ? '#4ade80' : v === 'Medium' ? GOLD : '#f87171';
+  const lsiColor = (s: number) => s >= 70 ? '#4ade80' : s >= 55 ? GOLD : '#fb923c';
+
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '32px 36px', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <SectionTitle sub="Where you stand against industry peers — real LSI estimates">
+          Comparative LSI Scores
+        </SectionTitle>
+        {lsiScore < peerAvg && (
+          <div style={{ padding: '8px 16px', background: 'rgba(251,146,60,0.1)', border: '1px solid rgba(251,146,60,0.3)',
+            borderRadius: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
+            <AlertTriangle size={13} color="#fb923c" />
+            <span style={{ fontSize: 12, color: '#fb923c', fontWeight: 600 }}>
+              {peerAvg - lsiScore} pts below peer average
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {['Name', 'Role', 'Archetype', 'LSI Score', 'Visibility', 'Your Gap'].map(h => (
+                <th key={h} style={{ fontSize: 10, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.08em',
+                  padding: '8px 12px', textAlign: 'left', borderBottom: `1px solid ${BORDER}`, whiteSpace: 'nowrap' }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {/* The client's own row */}
+            <tr style={{ background: `${GOLD}08` }}>
+              <td style={{ padding: '13px 12px', fontSize: 13, fontWeight: 800, color: GOLD }}>You</td>
+              <td style={{ padding: '13px 12px', fontSize: 12, color: TEXT }}>—</td>
+              <td style={{ padding: '13px 12px' }}><Pill color={GOLD}>Your Archetype</Pill></td>
+              <td style={{ padding: '13px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16, fontWeight: 900, color: lsiColor(lsiScore) }}>{lsiScore}</span>
+                  <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.07)', borderRadius: 2, maxWidth: 80 }}>
+                    <div style={{ height: '100%', width: `${(lsiScore / max) * 100}%`,
+                      background: lsiColor(lsiScore), borderRadius: 2 }} />
+                  </div>
+                </div>
+              </td>
+              <td style={{ padding: '13px 12px' }}><Pill color={GOLD}>Current</Pill></td>
+              <td style={{ padding: '13px 12px', fontSize: 12, color: MUTED }}>—</td>
+            </tr>
+            {peers.map((p, i) => {
+              const gap = p.estimated_lsi - lsiScore;
+              return (
+                <tr key={i} style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                  <td style={{ padding: '13px 12px', fontSize: 13, fontWeight: 600, color: 'white' }}>{p.name}</td>
+                  <td style={{ padding: '13px 12px', fontSize: 12, color: MUTED }}>{p.role}</td>
+                  <td style={{ padding: '13px 12px' }}><Pill color="rgba(255,255,255,0.4)">{p.archetype}</Pill></td>
+                  <td style={{ padding: '13px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 16, fontWeight: 900, color: lsiColor(p.estimated_lsi) }}>{p.estimated_lsi}</span>
+                      <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.07)', borderRadius: 2, maxWidth: 80 }}>
+                        <div style={{ height: '100%', width: `${(p.estimated_lsi / max) * 100}%`,
+                          background: lsiColor(p.estimated_lsi), borderRadius: 2 }} />
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: '13px 12px' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: visColor(p.visibility) }}>{p.visibility}</span>
+                  </td>
+                  <td style={{ padding: '13px 12px' }}>
+                    {gap !== 0 && (
+                      <span style={{ fontSize: 12, fontWeight: 700, color: gap > 0 ? '#fb923c' : '#4ade80' }}>
+                        {gap > 0 ? `−${gap} pts` : `+${Math.abs(gap)} pts`}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {lsiScore < peerAvg && (
+        <div style={{ marginTop: 20, padding: '14px 18px', background: 'rgba(251,146,60,0.06)',
+          borderRadius: 10, border: '1px solid rgba(251,146,60,0.2)' }}>
+          <p style={{ fontSize: 13, color: '#fdba74', margin: 0, lineHeight: 1.6 }}>
+            <strong style={{ color: '#fb923c' }}>The opportunity:</strong> Your peers have an average LSI of {peerAvg}.
+            Closing this gap to peer average would move you into the top tier of visible executives in your sector.
+            The platform below will get you there systematically.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SECTION 6: Success & Failure Transitions ───────────────────────────────────
+function TransitionCaseStudies({ reveal }: { reveal: Record<string, unknown> }) {
+  const success = reveal.transition_success as Record<string, string> | null;
+  const failure = reveal.transition_failure as Record<string, string> | null;
+  if (!success && !failure) return null;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+      {success && (
+        <div style={{ background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 20, padding: '28px 28px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <TrendingUp size={18} color="#4ade80" />
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: 'white', margin: 0 }}>The Successful Transition</h3>
+              <p style={{ fontSize: 11, color: MUTED, margin: 0 }}>How it works when done right</p>
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <span style={{ fontSize: 15, fontWeight: 900, color: '#4ade80' }}>{success.name}</span>
+            <span style={{ fontSize: 12, color: MUTED }}> · {success.industry}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[
+              { label: 'Before', value: success.before, color: '#f87171' },
+              { label: 'After',  value: success.after,  color: '#4ade80' },
+              { label: 'Time',   value: success.how_long, color: GOLD },
+              { label: 'Key Move', value: success.key_move, color: 'white' },
+            ].map(({ label, value, color }) => value && (
+              <div key={label} style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+                <span style={{ fontSize: 10, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label} </span>
+                <p style={{ fontSize: 12, color, margin: '3px 0 0', lineHeight: 1.5 }}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {failure && (
+        <div style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 20, padding: '28px 28px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <TrendingDown size={18} color="#f87171" />
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: 'white', margin: 0 }}>The Cautionary Tale</h3>
+              <p style={{ fontSize: 11, color: MUTED, margin: 0 }}>What reputation neglect costs</p>
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <span style={{ fontSize: 15, fontWeight: 900, color: '#f87171' }}>{failure.name}</span>
+            <span style={{ fontSize: 12, color: MUTED }}> · {failure.industry}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[
+              { label: 'What Happened',    value: failure.what_happened, color: '#fca5a5' },
+              { label: 'Root Cause',       value: failure.root_cause,    color: '#fb923c' },
+              { label: 'Consequence',      value: failure.consequence,   color: '#f87171' },
+              { label: 'The Lesson',       value: failure.lesson,        color: 'white' },
+            ].map(({ label, value, color }) => value && (
+              <div key={label} style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+                <span style={{ fontSize: 10, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label} </span>
+                <p style={{ fontSize: 12, color, margin: '3px 0 0', lineHeight: 1.5 }}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SECTION 7: Cautionary Tales (the archetype-specific failures) ──────────────
+function CautionaryTales({ reveal }: { reveal: Record<string, unknown> }) {
+  const tales = (reveal.cautionary_tales as Array<{
+    name: string; what_happened: string; archetype_failure: string; lesson: string;
+  }>) ?? [];
+  if (!tales.length) return null;
+
+  return (
+    <div style={{ background: CARD, border: '1px solid rgba(239,68,68,0.2)', borderRadius: 20, padding: '32px 36px', marginBottom: 20 }}>
+      <SectionTitle sub="Real examples of this archetype going wrong — and what to learn">
+        Cautionary Tales for This Archetype
+      </SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+        {tales.map((t, i) => (
+          <div key={i} style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.15)',
+            borderRadius: 14, padding: '20px 20px' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#fca5a5', marginBottom: 4 }}>{t.name}</div>
+            <p style={{ fontSize: 12, color: TEXT, margin: '0 0 10px', lineHeight: 1.6 }}>{t.what_happened}</p>
+            <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: '#f87171', fontWeight: 600 }}>Archetype failure: </span>
+              <span style={{ fontSize: 11, color: TEXT }}>{t.archetype_failure}</span>
+            </div>
+            <div style={{ padding: '8px 12px', background: `${GOLD}08`, borderRadius: 8 }}>
+              <span style={{ fontSize: 11, color: GOLD, fontWeight: 600 }}>Lesson: </span>
+              <span style={{ fontSize: 11, color: TEXT }}>{t.lesson}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── SECTION 8: Content Pillars (collapsed by default) ─────────────────────────
+function ContentPillars({ positioning }: { positioning: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false);
+  const pillars = (positioning.content_pillars as Array<{
+    name: string; themes: string[]; frequency: string; formats: string[];
+  }>) ?? [];
+  const statement = positioning.positioning_statement as string ?? '';
+  const lines = (positioning.signature_lines as string[]) ?? [];
+
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 20, marginBottom: 20, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', padding: '22px 32px', background: 'none', border: 'none', cursor: 'pointer',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'inherit' }}>
+        <div style={{ textAlign: 'left' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 800, color: 'white', margin: 0 }}>Content Strategy & Pillars</h3>
+          <p style={{ fontSize: 12, color: MUTED, margin: '3px 0 0' }}>
+            {pillars.length} pillars · Positioning statement · Signature lines
+          </p>
+        </div>
+        {open ? <ChevronUp size={18} color={MUTED} /> : <ChevronDown size={18} color={MUTED} />}
+      </button>
+
+      {open && (
+        <div style={{ padding: '0 32px 28px', borderTop: `1px solid ${BORDER}` }}>
+          {statement && (
+            <div style={{ margin: '20px 0 24px', padding: '16px 20px',
+              background: `${GOLD}08`, borderRadius: 12, border: `1px solid ${GOLD}25` }}>
+              <p style={{ fontSize: 11, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Positioning Statement</p>
+              <p style={{ fontSize: 14, color: 'white', fontWeight: 600, margin: 0, lineHeight: 1.6, fontStyle: 'italic' }}>&ldquo;{statement}&rdquo;</p>
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12, marginBottom: 20 }}>
+            {pillars.map((p, i) => (
+              <div key={i} style={{ background: CARD2, borderRadius: 14, padding: '18px 18px',
+                border: `1px solid rgba(255,255,255,0.07)` }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: 'white', margin: '0 0 6px' }}>{p.name}</p>
+                <p style={{ fontSize: 11, color: GOLD, margin: '0 0 10px' }}>{p.frequency}</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
+                  {(p.themes ?? []).map((t, ti) => (
+                    <span key={ti} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10,
+                      background: 'rgba(255,255,255,0.06)', color: TEXT }}>{t}</span>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {(p.formats ?? []).map((f, fi) => (
+                    <span key={fi} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10,
+                      background: `${GOLD}12`, color: GOLD, border: `1px solid ${GOLD}25` }}>{f}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {lines.length > 0 && (
+            <div>
+              <p style={{ fontSize: 12, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Signature Lines</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {lines.map((l, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 14px', background: CARD2, borderRadius: 8,
+                    border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <span style={{ fontSize: 13, color: TEXT }}>{l}</span>
+                    <button onClick={() => navigator.clipboard?.writeText(l)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                      <Copy size={12} color={MUTED} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Loading state ──────────────────────────────────────────────────────────────
+function AnalysingState({ clientName }: { clientName: string }) {
+  const steps = ['Analysing digital footprint', 'Matching archetype patterns', 'Identifying peer comparisons', 'Building your strategy'];
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setStep(s => (s + 1) % steps.length), 2200);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28 }}>
+      <div style={{ position: 'relative', width: 100, height: 100 }}>
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%',
+          border: `2px solid ${GOLD}20`, borderTopColor: GOLD,
+          animation: 'spin 1.2s linear infinite' }} />
+        <div style={{ position: 'absolute', inset: 12, borderRadius: '50%',
+          border: `2px solid ${GOLD}10`, borderBottomColor: `${GOLD}60`,
+          animation: 'spin 1.8s linear infinite reverse' }} />
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 32 }}>✨</div>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 11, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>
+          Analysing {clientName}
+        </p>
+        <p style={{ fontSize: 16, fontWeight: 700, color: 'white', marginBottom: 6 }}>Identifying Your Archetype</p>
+        <p style={{ fontSize: 13, color: MUTED }}>{steps[step]}…</p>
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
+// ── Empty state ────────────────────────────────────────────────────────────────
+function EmptyState({ onAnalyse, analysing }: { onAnalyse: () => void; analysing: boolean }) {
+  return (
+    <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, textAlign: 'center' }}>
+      <div style={{ fontSize: 64 }}>🎯</div>
+      <div>
+        <h2 style={{ fontSize: 26, fontWeight: 900, color: 'white', marginBottom: 10 }}>Discover Your Archetype</h2>
+        <p style={{ fontSize: 14, color: MUTED, maxWidth: 480, lineHeight: 1.7, margin: '0 auto 28px' }}>
+          Our AI analyses your digital footprint, industry position, and communication patterns
+          to assign your precise Jungian archetype — the strategic foundation for everything that follows.
+        </p>
+      </div>
+      <button onClick={onAnalyse} disabled={analysing} style={{
+        padding: '16px 40px', background: GOLD, color: '#080C14',
+        fontWeight: 800, fontSize: 15, borderRadius: 12, border: 'none',
+        cursor: analysing ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+        display: 'flex', alignItems: 'center', gap: 10, opacity: analysing ? 0.7 : 1,
+      }}>
+        <Sparkles size={18} />
+        {analysing ? 'Analysing…' : 'Analyse My Archetype'}
+      </button>
+    </div>
+  );
+}
+
+// ── MAIN PAGE ──────────────────────────────────────────────────────────────────
+export default function PositionPage() {
+  const params   = useParams();
+  const clientId = params.id as string;
+
+  const [client,     setClient]     = useState<Record<string, unknown> | null>(null);
+  const [lsiRun,     setLsiRun]     = useState<Record<string, unknown> | null>(null);
+  const [positioning,setPositioning] = useState<Record<string, unknown> | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [analysing,  setAnalysing]  = useState(false);
+  const [error,      setError]      = useState('');
+
+  const load = useCallback(async () => {
+    const { data: c } = await supabase.from('clients').select('*').eq('id', clientId).maybeSingle();
+    const { data: lsi } = await supabase.from('lsi_runs').select('total_score,components')
+      .eq('client_id', clientId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    const { data: pos } = await supabase.from('positioning').select('*')
+      .eq('client_id', clientId).maybeSingle();
+    setClient(c);
+    setLsiRun(lsi);
+    setPositioning(pos);
+    setLoading(false);
+  }, [clientId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function runAnalysis() {
+    setAnalysing(true); setError('');
+    try {
+      const res  = await fetch('/api/archetype/assign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      const data = await res.json() as Record<string, unknown>;
+      if (!res.ok) throw new Error((data.message ?? data.error ?? 'Analysis failed') as string);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Analysis failed');
+    } finally {
+      setAnalysing(false);
+    }
+  }
+
+  const lsiScore  = (lsiRun?.total_score as number) ?? 0;
+  const clientName = (client?.name as string) ?? '';
+  const reveal    = positioning
+    ? ((positioning.archetype_reveal ?? positioning.archetypeReveal ?? {}) as Record<string, unknown>)
+    : {};
+
+  if (loading) return (
+    <div style={{ color: 'white', fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <AnalysingState clientName="…" />
+    </div>
+  );
+
+  return (
+    <div style={{ color: 'white', fontFamily: "'Inter', system-ui, sans-serif", paddingBottom: 80 }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+      {/* Page header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 12, animation: 'fadeUp 0.4s ease' }}>
+        <div>
+          <div style={{ fontSize: 10, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 7 }}>Module 3 of 6</div>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0, marginBottom: 5 }}>Position</h1>
+          <p style={{ fontSize: 13, color: MUTED, margin: 0 }}>Your strategic reputation archetype & competitive intelligence</p>
+        </div>
+        {positioning && (
+          <button onClick={runAnalysis} disabled={analysing}
+            style={{ padding: '10px 18px', background: 'transparent', color: GOLD,
+              border: `1px solid ${GOLD}45`, borderRadius: 8, cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit',
+              opacity: analysing ? 0.6 : 1 }}>
+            <RefreshCw size={13} style={{ animation: analysing ? 'spin 1s linear infinite' : 'none' }} />
+            {analysing ? 'Re-analysing…' : 'Re-analyse'}
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: 10, marginBottom: 20, fontSize: 13, color: '#fca5a5' }}>
+          {error}
+        </div>
+      )}
+
+      {analysing && <AnalysingState clientName={clientName} />}
+
+      {!analysing && !positioning && (
+        <EmptyState onAnalyse={runAnalysis} analysing={analysing} />
+      )}
+
+      {!analysing && positioning && (
+        <div style={{ animation: 'fadeUp 0.5s ease' }}>
+          <ArchetypeHeroReveal positioning={positioning} clientName={clientName} lsiScore={lsiScore} />
+          <WhyThisArchetype reveal={reveal} />
+          <StrengthsAndShadows reveal={reveal} archName={(positioning.personal_archetype as string) ?? ''} />
+          <NamedLeaders reveal={reveal} archName={(positioning.personal_archetype as string) ?? ''} />
+          <PeerLSIComparison reveal={reveal} lsiScore={lsiScore} />
+          <TransitionCaseStudies reveal={reveal} />
+          <CautionaryTales reveal={reveal} />
+          <ContentPillars positioning={positioning} />
+
+          {/* Progression CTA */}
+          <div style={{
+            marginTop: 16, padding: '32px 36px',
+            background: 'linear-gradient(135deg, rgba(201,168,76,0.08) 0%, rgba(8,12,20,0) 100%)',
+            border: `1px solid ${GOLD}30`, borderRadius: 20,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            flexWrap: 'wrap', gap: 20,
+          }}>
+            <div>
+              <div style={{ fontSize: 10, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>
+                Strategy Locked — What&apos;s Next?
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: 'white', margin: 0, marginBottom: 6 }}>
+                Start Creating Content for This Position
+              </h3>
+              <p style={{ fontSize: 13, color: MUTED, margin: 0, maxWidth: 480 }}>
+                Your archetype is set. Now generate thought leadership content perfectly aligned to your strategic position — LinkedIn posts, op-eds, and more.
+              </p>
+            </div>
+            <a href={`/dashboard/clients/${clientId}/express`} style={{
+              padding: '14px 28px', background: GOLD, color: '#080C14',
+              fontWeight: 800, fontSize: 14, borderRadius: 10,
+              cursor: 'pointer', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+            }}>
+              Create Content for This Position →
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
