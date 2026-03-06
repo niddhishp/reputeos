@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import {
@@ -690,6 +690,38 @@ function S10_ReputationDiagnosis({ r }: { r: DiscoveryReport }) {
   );
 }
 
+
+// ── Download button component ────────────────────────────────────────────────
+function DownloadReportButton({ clientId }: { clientId: string }) {
+  const [loading, setLoading] = React.useState(false);
+  async function download() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/export/pdf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, reportType: 'discovery' }),
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = 'SRE_Discovery_Report.pdf'; a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert('PDF export failed. Try again.'); }
+    finally { setLoading(false); }
+  }
+  return (
+    <button onClick={download} disabled={loading} style={{
+      padding: '10px 20px', background: 'transparent', color: GOLD,
+      fontWeight: 600, fontSize: 13, borderRadius: 10, whiteSpace: 'nowrap',
+      border: `1px solid rgba(201,168,76,0.4)`, cursor: loading ? 'not-allowed' : 'pointer',
+      fontFamily: 'inherit', opacity: loading ? 0.7 : 1,
+      display: 'inline-flex', alignItems: 'center', gap: 7,
+    }}>
+      {loading ? 'Generating PDF…' : '↓ Download SRE Report (PDF)'}
+    </button>
+  );
+}
 // ── Scanning UI ────────────────────────────────────────────────────────────
 function ScanningView({ progress, stage }: { progress: number; stage: string }) {
   const stages = [
@@ -1036,14 +1068,17 @@ export default function DiscoverPage() {
               Your digital footprint is mapped across 62 sources. Now calculate your LSI score — a precise measure of your reputation strength across 6 dimensions.
             </p>
           </div>
-          <a href={`/dashboard/clients/${clientId}/diagnose`} style={{
-            padding: '14px 28px', background: GOLD, color: '#080C14',
-            fontWeight: 800, fontSize: 14, borderRadius: 10, border: 'none',
-            cursor: 'pointer', textDecoration: 'none',
-            display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
-          }}>
-            Calculate My LSI Score →
-          </a>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+            <a href={`/dashboard/clients/${clientId}/diagnose`} style={{
+              padding: '14px 28px', background: GOLD, color: '#080C14',
+              fontWeight: 800, fontSize: 14, borderRadius: 10, border: 'none',
+              cursor: 'pointer', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+            }}>
+              Calculate My LSI Score →
+            </a>
+            <DownloadReportButton clientId={clientId} />
+          </div>
         </div>
       )}
     </div>

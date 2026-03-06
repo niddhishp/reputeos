@@ -104,7 +104,7 @@ export default function ValidatePage() {
     try {
       const res = await fetch(`/api/export/${reportFmt}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, reportType: 'monthly', period: 'full_engagement' }),
+        body: JSON.stringify({ clientId, reportType: 'discovery' }),
       });
       if (!res.ok) throw new Error(`Export failed: ${res.status}`);
       const blob = await res.blob();
