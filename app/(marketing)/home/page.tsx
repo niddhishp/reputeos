@@ -64,6 +64,7 @@ export default function HomePage() {
             <a href="#results" style={{ color: 'inherit', textDecoration: 'none' }}>Results</a>
             <a href="#usecases" style={{ color: 'inherit', textDecoration: 'none' }}>Who it&apos;s for</a>
             <Link href="/pricing" style={{ color: 'inherit', textDecoration: 'none' }}>Pricing</Link>
+            <Link href="/shield-pro" style={{ color: '#C9A84C', textDecoration: 'none', fontWeight: 600 }}>Shield Pro</Link>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={openLogin} style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.55)', background: 'none', border: '1px solid rgba(255,255,255,0.1)', padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontFamily: syne }}>App</button>

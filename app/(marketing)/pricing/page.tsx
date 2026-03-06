@@ -272,6 +272,34 @@ export default function PricingPage() {
 
       {/* Human Expert note */}
       <section style={{ padding: '0 24px 80px' }}>
+      {/* Shield Pro Add-on */}
+      <section style={{ padding: '0 24px 80px', maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ background: 'linear-gradient(135deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.02) 100%)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: 16, padding: '40px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 32 }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <Shield style={{ width: 20, height: 20, color: '#C9A84C' }} />
+              <span style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>Shield Pro — Legal Intelligence</span>
+              <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: '#C9A84C', background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: 5, padding: '2px 8px' }}>AGENCY & ENTERPRISE</span>
+            </div>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7, maxWidth: 520, marginBottom: 20 }}>
+              Run legal intelligence scans across 23+ Indian legal databases — eCourts, SEBI, MCA, NCLT, NCLAT, and the Enforcement Directorate. Surface litigation risk, regulatory actions, and enforcement signals before they surface in someone else&apos;s due diligence.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {['eCourts & Civil Litigation', 'SEBI Regulatory Orders', 'MCA Director Records', 'NCLT & Insolvency', 'Enforcement Directorate', 'Media Legal Signals'].map(f => (
+                <span key={f} style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6, padding: '4px 10px' }}>{f}</span>
+              ))}
+            </div>
+          </div>
+          <div style={{ textAlign: 'center', minWidth: 200 }}>
+            <div className="mono" style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Included in</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#C9A84C', marginBottom: 16 }}>Agency & Enterprise</div>
+            <Link href="/shield-pro" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#C9A84C', color: '#080C14', fontWeight: 700, fontSize: 13, padding: '11px 22px', borderRadius: 9, textDecoration: 'none' }}>
+              Learn More <ArrowRight style={{ width: 14, height: 14 }} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
         <div style={{ maxWidth: 720, margin: '0 auto', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 32, backgroundColor: 'rgba(255,255,255,0.01)', textAlign: 'center' }}>
           <p className="mono" style={{ fontSize: 11, color: '#C9A84C', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Available on all plans</p>
           <h3 style={{ fontSize: 22, fontWeight: 800, color: 'white', marginBottom: 12 }}>Need a Human Expert?</h3>

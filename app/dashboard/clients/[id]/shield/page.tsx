@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   Shield, RefreshCw, Plus, Zap, TrendingUp, TrendingDown,
   AlertTriangle, CheckCircle, Bell, BellOff, Trash2,
-  BarChart3, Users, Eye, MessageSquare, X,
+  BarChart3, Users, Eye, MessageSquare, X, Lock, ArrowRight,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
@@ -495,6 +496,32 @@ export default function ShieldPage() {
           </div>
         ))}
       </div>
+
+      {/* Shield Pro CTA */}
+      <Link href={`/dashboard/clients/${clientId}/shield/legal`} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: 'linear-gradient(135deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.02) 100%)',
+        border: '1px solid rgba(201,168,76,0.2)', borderRadius: 12, padding: '16px 20px',
+        textDecoration: 'none', marginBottom: 20, flexWrap: 'wrap', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(201,168,76,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Lock size={16} color={GOLD} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>Shield Pro — Legal Intelligence</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: GOLD, background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: 5, padding: '2px 7px', letterSpacing: '0.04em' }}>AGENCY+</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+              Scan eCourts, SEBI, MCA, NCLT & Enforcement Directorate — 23+ Indian legal databases
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: GOLD }}>
+          Run Legal Scan <ArrowRight size={13} />
+        </div>
+      </Link>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 4, width: 'fit-content' }}>
