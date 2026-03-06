@@ -359,7 +359,7 @@ function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
         <div>
           <p style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>How Media Frames Them</p>
           {frameEntries.map(({ k, label }, i) => {
-            const val = (mf.frame_distribution as Record<string, number>)[k] ?? 0;
+            const val = ((mf.frame_distribution ?? {}) as Record<string, number>)[k] ?? 0;
             return <Bar key={k} label={label} value={val} color={fColors[i]} />;
           })}
         </div>
@@ -371,11 +371,11 @@ function S5_MediaFraming({ r }: { r: DiscoveryReport }) {
           <div>
             <p style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Sector vs Non-Sector</p>
             <div style={{ display: 'flex', height: 30, borderRadius: 6, overflow: 'hidden', gap: 2 }}>
-              <div style={{ flex: mf.sector_split.sector_context, background: `${GOLD}70`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'white' }}>{mf.sector_split.sector_context}%</span>
+              <div style={{ flex: mf.sector_split?.sector_context ?? 50, background: `${GOLD}70`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'white' }}>{mf.sector_split?.sector_context ?? 50}%</span>
               </div>
-              <div style={{ flex: mf.sector_split.non_sector_context, background: 'rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 11, color: MUTED }}>{mf.sector_split.non_sector_context}%</span>
+              <div style={{ flex: mf.sector_split?.non_sector_context ?? 50, background: 'rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 11, color: MUTED }}>{mf.sector_split?.non_sector_context ?? 50}%</span>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
@@ -457,10 +457,10 @@ function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
           { label: 'LinkedIn', icon: '💼', data: s.linkedin },
           { label: 'Twitter / X', icon: '𝕏', data: s.twitter_x },
           { label: 'Wikipedia', icon: '📖', data: {
-              followers: s.wikipedia.exists ? s.wikipedia.quality : 'Absent',
-              activity: s.wikipedia.exists ? 'Exists' : 'Absent',
-              positioning: s.wikipedia.quality,
-              dormant: !s.wikipedia.exists,
+              followers: s.wikipedia?.exists ? (s.wikipedia?.quality ?? 'Unknown') : 'Absent',
+              activity: s.wikipedia?.exists ? 'Exists' : 'Absent',
+              positioning: s.wikipedia?.quality ?? 'None',
+              dormant: !s.wikipedia?.exists,
             }
           },
         ].map(({ label, icon, data }) => (
