@@ -479,9 +479,20 @@ function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
               <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {(items as string[]).map((item, i) => (
-                <span key={i} style={{ fontSize: 12, color: TEXT }}>{item}</span>
-              ))}
+              {(items ?? []).map((item, i) => {
+                // AI sometimes returns objects {url, type, title, publication} instead of strings
+                const text = typeof item === 'string'
+                  ? item
+                  : typeof item === 'object' && item !== null
+                    ? (item as Record<string,string>).title
+                      || (item as Record<string,string>).publication
+                      || (item as Record<string,string>).url
+                      || JSON.stringify(item)
+                    : String(item ?? '');
+                return (
+                  <span key={i} style={{ fontSize: 12, color: TEXT }}>{text}</span>
+                );
+              })}
             </div>
           </div>
         ))}
