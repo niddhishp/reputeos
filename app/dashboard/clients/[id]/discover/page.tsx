@@ -447,7 +447,7 @@ function S6_SocialThoughtLeadership({ r }: { r: DiscoveryReport }) {
 
       <Quote text={s.overview_narrative} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 22 }}>
-        <Badge text={`Visibility: ${s.visibility_tier}`} color={s.visibility_tier === 'High' ? '#4ade80' : s.visibility_tier.includes('Medium') ? GOLD : '#fb923c'} />
+        <Badge text={`Visibility: ${s.visibility_tier ?? 'Unknown'}`} color={(s.visibility_tier ?? '') === 'High' ? '#4ade80' : (s.visibility_tier ?? '').includes('Medium') ? GOLD : '#fb923c'} />
         <Badge text={`AI Discoverability: ${s.ai_discoverability}`} color='#818cf8' />
       </div>
 
@@ -636,7 +636,7 @@ function S9_RiskMatrix({ r }: { r: DiscoveryReport }) {
             <div key={i}>
               <div onClick={() => setOpen(isOpen ? null : i)} style={{ display: 'grid', gridTemplateColumns: '1.8fr 2fr auto', padding: '13px 16px', gap: 8, borderTop: `1px solid rgba(255,255,255,0.04)`, cursor: 'pointer', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)' }}>{layer.authority_layer}</span>
-                <span style={{ fontSize: 12, color: TEXT }}>{layer.observable_signal.slice(0, 90)}{layer.observable_signal.length > 90 ? '…' : ''}</span>
+                <span style={{ fontSize: 12, color: TEXT }}>{(layer.observable_signal ?? '').slice(0, 90)}{(layer.observable_signal?.length ?? 0) > 90 ? '…' : ''}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: sc.bg, border: `1px solid ${sc.border}`, color: sc.text, whiteSpace: 'nowrap' }}>{layer.gap_severity}</span>
                   {isOpen ? <ChevronUp size={12} color={MUTED} /> : <ChevronDown size={12} color={MUTED} />}
