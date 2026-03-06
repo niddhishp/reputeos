@@ -14,6 +14,10 @@
 import { runAgents, runSynthesisAgent, buildClientContext, type Agent } from '../agents';
 import type { DiscoveryReport, DiscoveryReportInput } from '@/app/api/discover/sources/discovery-report-prompt';
 
+// Inferred return type of compileEvidence — used by synthesis function
+type CompiledEvidenceGraph = ReturnType<typeof compileEvidence>;
+
+
 
 
 /* ─────────────────────────────────────────────
@@ -115,13 +119,6 @@ normalized_results:normalized
 }
 
 }
-
-/* ─────────────────────────────────────────────
-TYPE: COMPILED EVIDENCE GRAPH (return of compileEvidence)
-──────────────────────────────────────────── */
-type CompiledEvidenceGraph = ReturnType<typeof compileEvidence>;
-
-
 
 
 
