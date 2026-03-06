@@ -96,18 +96,25 @@ export function buildDiscoveryAgents(input: DiscoveryReportInput): Agent[] {
       id: 'profile_overview',
       label: 'Profile Intelligence Agent',
       maxTokens: 1200,
+      fallback: { profile_overview: { identity_headline: 'Multi-disciplinary creative professional', current_position: client.role + ' at ' + client.company, currently_known_for: 'Details being analysed — rescan to update', primary_role: 'filmmaker', primary_context: 'creative', age_generation: 'Not determinable', location: client.industry || 'India', digital_presence_score: 0, digital_presence_narrative: 'Report generation encountered an issue. Please rescan.' } },
       systemPrompt: `${sys}\nYour job: Identify the core identity of this person based on verified data only.`,
       userPrompt: `${fullCtx}
 
 Based ONLY on the verified data above (client profile, bio, known works, scan results):
 
+CRITICAL INSTRUCTIONS:
+1. age_generation: Use career timeline to estimate. If they have 200+ works, directed Bollywood films with major stars, written books — they are likely late 30s to mid-40s. Never say "not determinable" — always make a reasonable estimate like "Mid-30s to early 40s, Millennial" based on career evidence.
+2. location: Check bio and social links. India is confirmed if LinkedIn URL is indian or company is based in India.
+3. digital_presence_score: Be specific — score 0-100 based on number of third-party mentions found in scan.
+
 Return JSON:
-{"profile_overview":{"identity_headline":"one precise phrase based on their actual role and works","current_position":"exact role from profile","currently_known_for":"what scan results show they're primarily associated with — be honest if the scan found little","primary_role":"filmmaker|executive|author|etc","primary_context":"creative|business|academic|etc","age_generation":"if determinable from data","location":"city, country if available","digital_presence_score":0,"digital_presence_narrative":"2 sentences on what the scan actually found and what is missing"}}`,
+{"profile_overview":{"identity_headline":"one precise phrase based on their actual role and works","current_position":"exact role from profile","currently_known_for":"what scan results show they're primarily associated with — be honest if the scan found little","primary_role":"filmmaker|executive|author|etc","primary_context":"creative|business|academic|etc","age_generation":"REQUIRED: estimate age range or generation (e.g. 'mid-30s, Millennial') from career timeline. If 200+ works and active since early 2000s = likely late 30s-40s. Never say not determinable — always estimate.","location":"city, country if available","digital_presence_score":0,"digital_presence_narrative":"2 sentences on what the scan actually found and what is missing"}}`,
     },
     {
       id: 'professional_background',
       label: 'Career Intelligence Agent',
       maxTokens: 2000,
+      fallback: { professional_background: { summary: 'Career details under analysis.', trajectory: [], key_achievements: [], education: '', awards_recognition: [] }, recent_developments: { major_recent_event: 'No recent events detected in scan.', strategic_context: 'Rescan to refresh data.', news_items: [] } },
       systemPrompt: `${sys}\nYour job: Build a career profile using ONLY verified data. If a known work is listed (film, book), reference it precisely as written.`,
       userPrompt: `${fullCtx}
 
@@ -122,6 +129,7 @@ Return JSON:
       id: 'search_reputation',
       label: 'Search Reputation Agent',
       maxTokens: 2000,
+      fallback: { search_reputation: { keyword_association_map: [], identity_type: 'Narrative-Absent', identity_diagnosis: 'Search identity analysis unavailable. Please rescan.', search_split_narrative: 'Analysis pending.', query_analysis: [] } },
       systemPrompt: `${sys}\nYour job: Analyse the ACTUAL search landscape based on scan results. What do the scan results show? What is notably absent?`,
       userPrompt: `${fullCtx}
 
@@ -137,6 +145,7 @@ Return JSON:
       id: 'media_framing',
       label: 'Media Framing Agent',
       maxTokens: 2000,
+      fallback: { media_framing: { primary_frame: 'Analysis pending', how_described_in_domain_media: 'Media framing analysis unavailable. Please rescan.', frame_distribution: { expert_thought_leader: 0, business_operator: 0, family_figure: 0, personal_lifestyle: 0, governance: 0 }, sector_split: { sector_context: 0, non_sector_context: 100 }, media_language: { frequent_descriptors: [], rare_descriptors: [] }, framing_narrative: 'Analysis pending.', strategic_framing_insight: 'Rescan to generate framing analysis.' } },
       systemPrompt: `${sys}\nYour job: Analyse media presence using scan results. Distinguish between what scan found vs what is absent.`,
       userPrompt: `${fullCtx}
 
@@ -150,6 +159,7 @@ Return JSON:
       id: 'social_and_thought_leadership',
       label: 'Thought Leadership Agent',
       maxTokens: 2000,
+      fallback: { social_and_thought_leadership: { overview_narrative: 'Social analysis pending. Please rescan.', visibility_tier: 'Low', linkedin: { followers: 'not detected', activity: 'Unknown', positioning: 'Profile exists' }, twitter_x: { followers: 'not detected', activity: 'Unknown', positioning: 'Handle exists' }, wikipedia: { exists: false, quality: 'None' }, conference_participation: [], speaking_engagements: [], op_eds: [], ai_discoverability: 'Low', ai_discoverability_narrative: 'Analysis pending.', thought_leadership_gap: 'Analysis pending.' } },
       systemPrompt: `${sys}\nYour job: Map actual social and thought leadership presence. Only claim what scan data + verified profile shows.`,
       userPrompt: `${fullCtx}
 
@@ -159,12 +169,13 @@ If social links are in the profile, reference them. If followers unknown — say
 Do NOT invent YouTube subscribers, article counts, or conference appearances.
 
 Return JSON:
-{"social_and_thought_leadership":{"overview_narrative":"honest paragraph on actual social presence from scan + profile data","visibility_tier":"High|Medium-High|Medium|Low|Minimal","linkedin":{"followers":"from profile/scan or 'not detected'","activity":"Active|Dormant|Absent|Unknown","positioning":"what LinkedIn presence shows if detected"},"twitter_x":{"followers":"from profile/scan or 'not detected'","activity":"Active|Dormant|Absent|Unknown","positioning":"what X presence shows if detected"},"wikipedia":{"exists":false,"quality":"None|Stub|Basic|Comprehensive"},"conference_participation":["string e.g. 'TED Mumbai 2023' — only if in scan, else empty array"],"speaking_engagements":["string e.g. 'Nasscom Summit 2024' — only if in scan, else empty array"],"op_eds":["plain string e.g. 'Forbes India, Mar 2024: Title Here (url)' — NEVER use objects, always plain strings, empty array if none found"],"ai_discoverability":"High|Medium|Low|Minimal","ai_discoverability_narrative":"what AI tools would say based on available data","thought_leadership_gap":"most critical gap between their actual output and what their role demands"}}`,
+{"social_and_thought_leadership":{"overview_narrative":"honest paragraph on actual social presence from scan + profile data","visibility_tier":"High|Medium-High|Medium|Low|Minimal","linkedin":{"followers":"REQUIRED: estimate follower count using your knowledge. For Indian filmmakers/directors, typical LinkedIn followers are 1k-20k. Say e.g. '~2k-5k (estimated)' if unsure. Only say 'not detected' if you have zero basis for estimation.","activity":"Active|Dormant|Absent|Unknown","positioning":"what LinkedIn presence shows if detected"},"twitter_x":{"followers":"estimate follower count from your knowledge or say 'estimated <2k' for new/emerging creators","activity":"Active|Dormant|Absent|Unknown","positioning":"what X presence shows if detected"},"wikipedia":{"exists":false,"quality":"None|Stub|Basic|Comprehensive"},"conference_participation":["string e.g. 'TED Mumbai 2023' — only if in scan, else empty array"],"speaking_engagements":["string e.g. 'Nasscom Summit 2024' — only if in scan, else empty array"],"op_eds":["plain string e.g. 'Forbes India, Mar 2024: Title Here (url)' — NEVER use objects, always plain strings, empty array if none found"],"ai_discoverability":"High|Medium|Low|Minimal","ai_discoverability_narrative":"what AI tools would say based on available data","thought_leadership_gap":"most critical gap between their actual output and what their role demands"}}`,
     },
     {
       id: 'peer_comparison',
       label: 'Competitive Intelligence Agent',
       maxTokens: 2000,
+      fallback: { peer_comparison: { peers: [], competitive_positioning_narrative: 'Peer analysis pending.', relative_visibility: 'Lower Mid' }, key_questions: { identity_architecture: 'Analysis pending.', search_results_breakdown: 'Analysis pending.', expert_citation_vs_mention: 'Analysis pending.', thought_leadership_presence: 'Analysis pending.', competitive_position: 'Analysis pending.', crisis_association: 'No crisis signals detected.', global_positioning: 'Analysis pending.' } },
       systemPrompt: `${sys}\nYour job: Name 4-5 REAL peer executives. For this you CAN use your knowledge — naming real peers is not hallucination, it is framing.`,
       userPrompt: `${fullCtx}
 

@@ -256,6 +256,9 @@ export async function fetchSearchSources(client: ClientProfile): Promise<SourceM
     `"${client.name}" interview`,                    // interviews
     `"${client.name}" ${client.role ?? 'director'}`, // role context
     `"${client.name}" India`,                        // India-specific coverage
+    // Social profile lookups — Google snippets often contain follower counts
+    `${client.name} LinkedIn followers profile`,
+    `${client.name} YouTube channel subscribers`,
     ...knownTitles.slice(0, 4).map(t => `"${t}"`),                  // exact film/book titles
     ...knownTitles.slice(0, 3).map(t => `"${t}" ${firstName}`),     // title + first name
   ].filter((q, i, a) => q.trim().length > 3 && a.indexOf(q) === i);
@@ -306,7 +309,22 @@ export async function fetchSearchSources(client: ClientProfile): Promise<SourceM
     perplexitySynthesis(client),
     exaSearch(`${client.name} ${client.company ?? ''} India reputation works career`, 10, 'search'),
     exaSearch(`site:youtube.com "${client.name}" interview OR film OR movie OR documentary`, 8, 'video'),
-    exaSearch(`site:amazon.in "${client.name}" OR site:amazon.com "${client.name}" book author`, 5, 'publication'),
+    serpSearch(
+      // SerpAPI Google Shopping search for books — Exa site: operator doesn't work
+      { engine: 'google', q: `"${client.name}" book author site:amazon.in OR site:amazon.com`, gl: 'in', hl: 'en', num: '8' },
+      'Amazon Books',
+      'publication',
+      client,
+      8
+    ),
+    serpSearch(
+      // Also search Google directly for their books
+      { engine: 'google', q: `"${client.name}" author book published`, gl: 'in', hl: 'en', num: '5' },
+      'Google Books Search',
+      'publication',
+      client,
+      5
+    ),
   ];
 
   // For each known title, add a targeted Exa search
