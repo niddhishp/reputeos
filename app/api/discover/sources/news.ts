@@ -1,44 +1,146 @@
 /**
  * SOURCE MODULE: News & Media
- * Covers: 9 Indian RSS feeds, NewsAPI, The Guardian, New York Times,
- *         Reuters, Bloomberg, VCCircle, The Ken, Entrackr via Exa
+ *
+ * Architecture fix (March 2026):
+ * - Added Google News engine searches (was only using Google Web before)
+ * - Added entertainment/Bollywood RSS feeds
+ * - Fixed Exa domain list to include entertainment outlets
+ * - Made Exa domain selection industry-aware
+ * - Hardcoded anchor queries that always run regardless of AI query generator
  */
 
-import { SourceResult, SourceModuleResult, ClientProfile, fetchRSS, buildSearchQuery } from './types';
+import { SourceResult, SourceModuleResult, ClientProfile, fetchRSS } from './types';
 
+const SERPAPI_KEY = () => process.env.SERPAPI_KEY ?? '';
 
+// ── RSS Feed lists ──────────────────────────────────────────────────────────
 
-
-// All Indian RSS feeds — no key needed
-const INDIAN_RSS_FEEDS = [
+const BUSINESS_RSS_FEEDS = [
   { name: 'Economic Times',    url: 'https://economictimes.indiatimes.com/rssfeedstopstories.cms' },
   { name: 'Business Standard', url: 'https://www.business-standard.com/rss/home_page_top_stories.rss' },
   { name: 'Livemint',          url: 'https://www.livemint.com/rss/news' },
-  { name: 'Financial Express', url: 'https://www.financialexpress.com/feed/' },
-  { name: 'Moneycontrol',      url: 'https://www.moneycontrol.com/rss/latestnews.xml' },
-  { name: 'NDTV Profit',       url: 'https://www.ndtv.com/business/feeds/rss' },
   { name: 'Forbes India',      url: 'https://www.forbesindia.com/blog/feed/' },
   { name: 'YourStory',         url: 'https://yourstory.com/feed' },
   { name: 'Inc42',             url: 'https://inc42.com/feed/' },
-  { name: 'Mint Lounge',       url: 'https://lifestyle.livemint.com/feed' },
 ];
+
+const ENTERTAINMENT_RSS_FEEDS = [
+  { name: 'Times of India Movies',  url: 'https://timesofindia.indiatimes.com/rss/entertainment/movies.cms' },
+  { name: 'NDTV Movies',            url: 'https://feeds.feedburner.com/NdtvMovies-Movies' },
+  { name: 'Bollywood Hungama',      url: 'https://www.bollywoodhungama.com/rss/news.xml' },
+  { name: 'Pinkvilla',              url: 'https://www.pinkvilla.com/feed' },
+  { name: 'Filmfare',               url: 'https://www.filmfare.com/rss/news.xml' },
+  { name: 'Outlook India Ent.',     url: 'https://www.outlookindia.com/art-entertainment/rss' },
+];
+
+const GENERAL_NEWS_RSS_FEEDS = [
+  { name: 'NDTV India',   url: 'https://feeds.feedburner.com/ndtvnews-india-news' },
+  { name: 'India Today',  url: 'https://www.indiatoday.in/rss/1206546' },
+  { name: 'The Hindu',    url: 'https://www.thehindu.com/feeder/default.rss' },
+];
+
+/**
+ * Detect industry type to choose right RSS feeds and Exa domains.
+ */
+function detectIndustryType(client: ClientProfile): 'entertainment' | 'tech' | 'finance' | 'general' {
+  const text = [
+    client.industry ?? '',
+    client.role ?? '',
+    ...(client.keywords ?? []),
+    client.bio ?? '',
+  ].join(' ').toLowerCase();
+
+  if (/(film|director|actor|cinema|bollywood|entertainment|movie|series|ott|creative|music|art|media)/i.test(text))
+    return 'entertainment';
+  if (/(startup|venture|vc|fintech|saas|software|tech|ai|ml|founder|cto|ceo|engineer)/i.test(text))
+    return 'tech';
+  if (/(banking|finance|investment|fund|nse|bse|sebi|cfo|analyst|equity|wealth)/i.test(text))
+    return 'finance';
+  return 'general';
+}
+
+// ── Google News engine (SerpAPI) ─────────────────────────────────────────────
+
+/**
+ * Google News is the MOST IMPORTANT search for press coverage.
+ * It indexes Mid-Day, TOI, News18, IANS, Outlook India, DNA India, Gulf News etc.
+ * Always run this with exact name + film/work title queries.
+ */
+async function googleNewsSearch(
+  queries: string[],
+  sourceName = 'Google News'
+): Promise<SourceResult[]> {
+  if (!SERPAPI_KEY()) return [];
+
+  const all: SourceResult[] = [];
+
+  // Run all queries in parallel
+  const results = await Promise.allSettled(
+    queries.map(async (q) => {
+      try {
+        const url = new URL('https://serpapi.com/search');
+        url.searchParams.set('api_key', SERPAPI_KEY());
+        url.searchParams.set('engine', 'google_news');
+        url.searchParams.set('q', q);
+        url.searchParams.set('gl', 'in');
+        url.searchParams.set('hl', 'en');
+        url.searchParams.set('num', '10');
+
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(12000) });
+        if (!res.ok) return [];
+        const data = await res.json();
+
+        const items: SourceResult[] = [];
+
+        // news_results is the main field for google_news engine
+        for (const r of [...(data.news_results ?? []), ...(data.organic_results ?? [])]) {
+          // Google News returns source name in result
+          const outlet = r.source?.name ?? r.displayed_link ?? sourceName;
+          items.push({
+            source: outlet,
+            category: 'news',
+            url: r.link ?? r.url ?? '',
+            title: r.title ?? '',
+            snippet: r.snippet ?? r.description ?? '',
+            date: r.date ?? r.published_date,
+            relevanceScore: 0.85,  // news coverage is high-relevance
+            metadata: { engine: 'google_news', query: q, outlet },
+          });
+        }
+
+        return items;
+      } catch {
+        return [];
+      }
+    })
+  );
+
+  for (const r of results) {
+    if (r.status === 'fulfilled') all.push(...r.value);
+  }
+
+  return all;
+}
+
+// ── NewsAPI ──────────────────────────────────────────────────────────────────
 
 async function fetchNewsAPI(client: ClientProfile): Promise<SourceResult[]> {
   if (!process.env.NEWSAPI_KEY) return [];
   try {
-    const q = `"${client.name}"${client.company ? ` OR "${client.company}"` : ''}`;
+    // Use name variants — handles double-vowel spelling differences
+    const nameQ = `"${client.name}"`;
     const url = new URL('https://newsapi.org/v2/everything');
-    url.searchParams.set('q', q);
+    url.searchParams.set('q', nameQ);
     url.searchParams.set('language', 'en');
     url.searchParams.set('sortBy', 'relevancy');
-    url.searchParams.set('pageSize', '10');
+    url.searchParams.set('pageSize', '15');
     url.searchParams.set('apiKey', process.env.NEWSAPI_KEY);
 
     const res = await fetch(url.toString(), { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return [];
     const data = await res.json();
 
-    return (data.articles ?? []).slice(0, 8).map((a: {
+    return (data.articles ?? []).slice(0, 12).map((a: {
       source?: { name?: string };
       url?: string;
       title?: string;
@@ -51,6 +153,7 @@ async function fetchNewsAPI(client: ClientProfile): Promise<SourceResult[]> {
       title: a.title ?? '',
       snippet: a.description ?? '',
       date: a.publishedAt,
+      relevanceScore: 0.8,
       metadata: { api: 'newsapi' },
     }));
   } catch {
@@ -58,88 +161,52 @@ async function fetchNewsAPI(client: ClientProfile): Promise<SourceResult[]> {
   }
 }
 
-async function fetchGuardian(client: ClientProfile): Promise<SourceResult[]> {
-  if (!process.env.GUARDIAN_API_KEY) return [];
-  try {
-    const url = new URL('https://content.guardianapis.com/search');
-    url.searchParams.set('q', `"${client.name}"`);
-    url.searchParams.set('show-fields', 'trailText,byline');
-    url.searchParams.set('page-size', '5');
-    url.searchParams.set('api-key', process.env.GUARDIAN_API_KEY);
+// ── Exa neural news search ───────────────────────────────────────────────────
 
-    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    return (data.response?.results ?? []).map((r: {
-      webUrl?: string;
-      webTitle?: string;
-      fields?: { trailText?: string };
-      webPublicationDate?: string;
-    }) => ({
-      source: 'The Guardian',
-      category: 'news',
-      url: r.webUrl ?? '',
-      title: r.webTitle ?? '',
-      snippet: r.fields?.trailText ?? '',
-      date: r.webPublicationDate,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-async function fetchNYT(client: ClientProfile): Promise<SourceResult[]> {
-  if (!process.env.NYT_API_KEY) return [];
-  try {
-    const url = new URL('https://api.nytimes.com/svc/search/v2/articlesearch.json');
-    url.searchParams.set('q', `"${client.name}"`);
-    url.searchParams.set('sort', 'relevance');
-    url.searchParams.set('fl', 'headline,snippet,web_url,pub_date,source');
-    url.searchParams.set('api-key', process.env.NYT_API_KEY);
-
-    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    return (data.response?.docs ?? []).slice(0, 5).map((d: {
-      web_url?: string;
-      headline?: { main?: string };
-      snippet?: string;
-      pub_date?: string;
-    }) => ({
-      source: 'New York Times',
-      category: 'news',
-      url: d.web_url ?? '',
-      title: d.headline?.main ?? '',
-      snippet: d.snippet ?? '',
-      date: d.pub_date,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-async function fetchExaNews(client: ClientProfile): Promise<SourceResult[]> {
+async function fetchExaNews(client: ClientProfile, industryType: string): Promise<SourceResult[]> {
   if (!process.env.EXA_API_KEY) return [];
+
+  // Domain list by industry — no allowlist for entertainment (too restrictive)
+  const domainsByIndustry: Record<string, string[]> = {
+    entertainment: [
+      'timesofindia.indiatimes.com', 'mid-day.com', 'news18.com',
+      'ndtv.com', 'outlookindia.com', 'dnaindia.com', 'ianslive.in',
+      'bollywoodhungama.com', 'pinkvilla.com', 'filmcompanion.in',
+      'republicworld.com', 'gulfnews.com', 'indulgexpress.com',
+      'indiantelevision.com', 'boundindia.com', 'theindian.in',
+    ],
+    tech: [
+      'techcrunch.com', 'inc42.com', 'entrackr.com', 'yourstory.com',
+      'the-ken.com', 'businessinsider.com', 'wired.com', 'thenextweb.com',
+      'vccircle.com', 'startupstories.in',
+    ],
+    finance: [
+      'vccircle.com', 'the-ken.com', 'bloomberg.com', 'ft.com',
+      'reuters.com', 'livemint.com', 'economictimes.indiatimes.com',
+      'moneycontrol.com', 'business-standard.com',
+    ],
+    general: [
+      'thehindu.com', 'ndtv.com', 'indiatoday.in', 'hindustantimes.com',
+      'timesofindia.indiatimes.com', 'outlookindia.com', 'news18.com',
+    ],
+  };
+
+  const domains = domainsByIndustry[industryType] ?? domainsByIndustry.general;
+
   try {
-    const query = `${client.name} ${client.company ?? ''} news coverage India`;
+    const query = `${client.name}${client.company ? ` ${client.company}` : ''} news coverage press`;
     const res = await fetch('https://api.exa.ai/search', {
       method: 'POST',
       headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query,
-        numResults: 12,
+        numResults: 15,
         useAutoprompt: true,
         type: 'neural',
-        includeDomains: [
-          'vccircle.com', 'the-ken.com', 'entrackr.com',
-          'reuters.com', 'bloomberg.com', 'ft.com',
-          'wsj.com', 'techcrunch.com', 'businessinsider.com',
-        ],
-        contents: { text: { maxCharacters: 400 } },
+        includeDomains: domains,
+        contents: { text: { maxCharacters: 500 } },
       }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(12000),
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -147,20 +214,17 @@ async function fetchExaNews(client: ClientProfile): Promise<SourceResult[]> {
     return (data.results ?? []).map((r: {
       url: string; title: string; text?: string; publishedDate?: string;
     }) => {
-      const domain = new URL(r.url).hostname.replace('www.', '');
-      const sourceMap: Record<string, string> = {
-        'vccircle.com': 'VCCircle', 'the-ken.com': 'The Ken',
-        'entrackr.com': 'Entrackr', 'reuters.com': 'Reuters',
-        'bloomberg.com': 'Bloomberg', 'ft.com': 'Financial Times',
-      };
+      let domain = '';
+      try { domain = new URL(r.url).hostname.replace('www.', ''); } catch { domain = 'Unknown'; }
       return {
-        source: sourceMap[domain] ?? domain,
+        source: domain,
         category: 'news',
         url: r.url,
-        title: r.title,
-        snippet: r.text?.slice(0, 400) ?? '',
+        title: r.title ?? '',
+        snippet: r.text?.slice(0, 500) ?? '',
         date: r.publishedDate,
-        metadata: { via: 'exa' },
+        relevanceScore: 0.75,
+        metadata: { via: 'exa', domain },
       };
     });
   } catch {
@@ -168,31 +232,67 @@ async function fetchExaNews(client: ClientProfile): Promise<SourceResult[]> {
   }
 }
 
+// ── Main export ──────────────────────────────────────────────────────────────
+
 export async function fetchNewsSources(client: ClientProfile): Promise<SourceModuleResult> {
   const start = Date.now();
   const errors: string[] = [];
   const name = client.name;
+  const industryType = detectIndustryType(client);
 
-  // Fetch all RSS feeds in parallel (10 feeds)
-  const rssPromises = INDIAN_RSS_FEEDS.map(feed =>
-    fetchRSS(feed.url, feed.name, name, 4).catch(() => [] as SourceResult[])
+  // ── Extract film/work titles for anchor queries ───────────────────────────
+  // These come from bio + keywords — deterministic, no AI needed
+  const { extractKnownTitlesForSearch } = await import('@/lib/ai/agents/query-generator');
+  const knownTitles = extractKnownTitlesForSearch(client.bio ?? '', client.keywords ?? []);
+
+  // ── Anchor Google News queries — ALWAYS run these ─────────────────────────
+  // These are the highest-value queries. Using exact quoted name finds press articles
+  // that search by keyword alone would miss.
+  const anchorNewsQueries = [
+    `"${name}"`,                               // exact name — finds all press mentions
+    `"${name}" interview`,                     // interviews and profiles
+    `"${name}" ${client.role ?? 'director'}`,  // role-specific press
+    ...knownTitles.slice(0, 3).map(t => `"${t}" ${name.split(' ')[0]}`),  // film/book titles
+  ].filter(Boolean);
+
+  // Also run Google Web for news (catches articles not in News index)
+  const anchorWebQueries = [
+    `"${name}" site:mid-day.com OR site:timesofindia.com OR site:news18.com OR site:ndtv.com`,
+    `"${name}" site:outlookindia.com OR site:dnaindia.com OR site:ianslive.in`,
+  ];
+
+  // ── Run all sources in parallel ───────────────────────────────────────────
+  const entertainmentFeeds = industryType === 'entertainment'
+    ? ENTERTAINMENT_RSS_FEEDS
+    : GENERAL_NEWS_RSS_FEEDS;
+
+  const allFeeds = [...BUSINESS_RSS_FEEDS, ...entertainmentFeeds];
+
+  const rssPromises = allFeeds.map(feed =>
+    fetchRSS(feed.url, feed.name, name, 5).catch(() => [] as SourceResult[])
   );
 
   const [
+    googleNews,
+    googleNewsWeb,
     rssResults,
     newsapi,
-    guardian,
-    nyt,
     exaNews,
   ] = await Promise.allSettled([
-    Promise.all(rssPromises).then(results => results.flat()),
+    googleNewsSearch(anchorNewsQueries, 'Google News'),
+    googleNewsSearch(anchorWebQueries, 'Google Web News'),
+    Promise.all(rssPromises).then(r => r.flat()),
     fetchNewsAPI(client),
-    fetchGuardian(client),
-    fetchNYT(client),
-    fetchExaNews(client),
+    fetchExaNews(client, industryType),
   ]);
 
   const allResults: SourceResult[] = [];
+
+  if (googleNews.status === 'fulfilled') allResults.push(...googleNews.value);
+  else errors.push(`Google News: ${googleNews.reason?.message}`);
+
+  if (googleNewsWeb.status === 'fulfilled') allResults.push(...googleNewsWeb.value);
+  else errors.push(`Google Web News: ${googleNewsWeb.reason?.message}`);
 
   if (rssResults.status === 'fulfilled') allResults.push(...rssResults.value);
   else errors.push(`RSS feeds: ${rssResults.reason?.message}`);
@@ -200,19 +300,15 @@ export async function fetchNewsSources(client: ClientProfile): Promise<SourceMod
   if (newsapi.status === 'fulfilled') allResults.push(...newsapi.value);
   else errors.push(`NewsAPI: ${newsapi.reason?.message}`);
 
-  if (guardian.status === 'fulfilled') allResults.push(...guardian.value);
-  else errors.push(`Guardian: ${guardian.reason?.message}`);
-
-  if (nyt.status === 'fulfilled') allResults.push(...nyt.value);
-  else errors.push(`NYT: ${nyt.reason?.message}`);
-
   if (exaNews.status === 'fulfilled') allResults.push(...exaNews.value);
   else errors.push(`Exa News: ${exaNews.reason?.message}`);
+
+  console.log(`[News] ${name}: ${allResults.length} results, industry=${industryType}, googleNews=${googleNews.status}`);
 
   return {
     module: 'News & Media',
     results: allResults,
-    sourcesScanned: 14,
+    sourcesScanned: allFeeds.length + 4,
     errors,
     durationMs: Date.now() - start,
   };

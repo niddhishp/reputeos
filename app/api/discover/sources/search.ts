@@ -244,6 +244,36 @@ export async function fetchSearchSources(client: ClientProfile): Promise<SourceM
   const errors: string[] = [];
   const allResults: SourceResult[] = [];
 
+  // ── ANCHOR QUERIES — Always run, no AI needed ─────────────────────────────
+  // Run immediately in parallel. Even if AI query generator fails/times out,
+  // these will find press coverage, interviews, and film/book mentions.
+  const { extractKnownTitlesForSearch } = await import('@/lib/ai/agents/query-generator');
+  const knownTitles = extractKnownTitlesForSearch(client.bio ?? '', client.keywords ?? []);
+  const firstName = client.name.split(' ')[0];
+
+  const anchorQueries: string[] = [
+    `"${client.name}"`,                              // exact name — finds all press
+    `"${client.name}" interview`,                    // interviews
+    `"${client.name}" ${client.role ?? 'director'}`, // role context
+    `"${client.name}" India`,                        // India-specific coverage
+    ...knownTitles.slice(0, 4).map(t => `"${t}"`),                  // exact film/book titles
+    ...knownTitles.slice(0, 3).map(t => `"${t}" ${firstName}`),     // title + first name
+  ].filter((q, i, a) => q.trim().length > 3 && a.indexOf(q) === i);
+
+  const anchorResults = await Promise.allSettled(
+    anchorQueries.map(q => serpSearch(
+      { engine: 'google', q, gl: 'in', hl: 'en', num: '10' },
+      'Google Web',
+      detectQueryCategory(q),
+      client,
+      10
+    ))
+  );
+  for (const r of anchorResults) {
+    if (r.status === 'fulfilled') allResults.push(...r.value);
+  }
+  console.log(`[Search] Anchor queries: ${anchorQueries.length} run, ${allResults.length} results so far`);
+
   // ── Step 1: Generate deep, persona-specific search queries ────────────────
   let deepQueries: string[] = [];
   try {
@@ -257,7 +287,10 @@ export async function fetchSearchSources(client: ClientProfile): Promise<SourceM
       social_links: client.social_links ?? undefined,
     });
     deepQueries = flattenQuerySet(querySet);
-    console.log(`[Search] Generated ${deepQueries.length} deep queries for ${client.name}`);
+    // Remove queries already covered by anchor queries
+    const anchorSet = new Set(anchorQueries.map(q => q.toLowerCase()));
+    deepQueries = deepQueries.filter(q => !anchorSet.has(q.toLowerCase()));
+    console.log(`[Search] Generated ${deepQueries.length} additional deep queries for ${client.name}`);
   } catch (e) {
     // Fallback to basic query
     const q = buildSearchQuery(client);
@@ -266,22 +299,17 @@ export async function fetchSearchSources(client: ClientProfile): Promise<SourceM
   }
 
   // ── Step 2: Always-run enrichment sources (Wikipedia, Perplexity, Exa) ───
-  // Extract known titles for targeted enrichment
-  const { extractKnownTitlesForSearch } = await import('@/lib/ai/agents/query-generator');
-  const knownTitles = extractKnownTitlesForSearch(client.bio ?? '', client.keywords ?? []);
+  // knownTitles already extracted above in anchor queries block
 
   const alwaysRun: Promise<SourceResult[]>[] = [
     wikipediaSearch(client.name),
     perplexitySynthesis(client),
-    // General Exa search
     exaSearch(`${client.name} ${client.company ?? ''} India reputation works career`, 10, 'search'),
-    // YouTube-specific Exa search — always run even if no YouTube link provided
     exaSearch(`site:youtube.com "${client.name}" interview OR film OR movie OR documentary`, 8, 'video'),
-    // Amazon books search
     exaSearch(`site:amazon.in "${client.name}" OR site:amazon.com "${client.name}" book author`, 5, 'publication'),
   ];
 
-  // For each known title, add a targeted search
+  // For each known title, add a targeted Exa search
   for (const title of knownTitles.slice(0, 5)) {
     alwaysRun.push(exaSearch(`"${title}" ${client.name} film movie review`, 5, 'works'));
   }
