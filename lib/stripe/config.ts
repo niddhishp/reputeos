@@ -57,7 +57,7 @@ export const ADD_ONS: Record<AddOnId, StripeAddOn> = {
     type: 'recurring', description: 'Run digital footprint scans for 1 client. No full platform needed.',
   },
   shield_pro: {
-    id: 'shield_pro', name: 'Shield Pro', price: 7999,
+    id: 'shield_pro', name: 'Shield Pro', price: 14999,
     priceId: process.env.STRIPE_PRICE_SHIELD_PRO ?? '',
     type: 'recurring', description: 'Legal risk intelligence — eCourts, SEBI, MCA, enforcement.',
   },

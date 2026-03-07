@@ -44,7 +44,7 @@ export default function SignupPage() {
       email: form.email,
       password: form.password,
       options: {
-        data: { name: form.name, role: form.mode, plan: form.mode === 'individual' ? 'individual' : 'solo' },
+        data: { name: form.name, role: form.mode, plan: 'solo' },
       },
     });
 
@@ -56,7 +56,7 @@ export default function SignupPage() {
         id: data.user.id,
         name: form.name,
         role: form.mode,
-        plan: form.mode === 'individual' ? 'individual' : 'solo',
+        plan: 'solo',
       });
     }
 

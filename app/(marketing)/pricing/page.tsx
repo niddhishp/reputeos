@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Zap, Building2, Crown, Shield, BookOpen, CreditCard, Star } from 'lucide-react';
+import { MarketingFooter } from '@/components/marketing/footer';
 
 const GOLD   = '#C9A84C';
 const BG     = '#080C14';
@@ -36,7 +37,7 @@ const PLANS = [
 
 const ADD_ONS = [
   { id: 'discover_only', icon: BookOpen, name: 'Discover Module Only', price: 1999, type: 'recurring', desc: 'Just the digital footprint scan. Perfect if you only need reputation data for 1 client.' },
-  { id: 'shield_pro', icon: Shield, name: 'Shield Pro Add-on', price: 7999, type: 'recurring', desc: 'Legal risk intelligence — eCourts, SEBI, MCA, enforcement searches. Add to any plan.' },
+  { id: 'shield_pro', icon: Shield, name: 'Shield Pro Add-on', price: 14999, type: 'recurring', desc: 'Legal risk intelligence — eCourts, SEBI, MCA, enforcement searches. Add to any plan.' },
   { id: 'scan_credits_20', icon: CreditCard, name: '20 Scan Credits', price: 999, type: 'one_time', desc: '20 discovery scans that never expire. Top up whenever you need more.' },
   { id: 'scan_credits_100', icon: Star, name: '100 Scan Credits', price: 3999, type: 'one_time', desc: 'Best value. 100 scans that never expire — ₹40 per scan.' },
 ];
@@ -243,6 +244,7 @@ export default function PricingPage() {
           </div>
         </div>
       </div>
+      <MarketingFooter />
     </div>
   );
 }

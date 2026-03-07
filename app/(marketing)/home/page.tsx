@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Shield, Search, BarChart2, Target, PenLine, CheckSquare, ArrowRight, TrendingUp, Star, ChevronRight } from 'lucide-react';
 import { AuthModal } from '@/components/auth-modal';
+import { MarketingFooter } from '@/components/marketing/footer';
 
 // SEO note: metadata must be in a separate server component or layout when using 'use client'
 // The marketing layout sets robots: index, follow. Page title is set via <title> in head via next/head if needed.
@@ -31,10 +32,21 @@ const LSI_BANDS = [
 ];
 
 const USE_CASES = [
-  { icon: '👤', title: 'The Invisible Architect', sub: 'Executives & Senior Leaders', desc: 'Deeply accomplished but digitally invisible. Your work is not speaking for itself because the internet has not heard about it yet.' },
-  { icon: '⏱', title: 'The Pre-Event Sprinter', sub: 'IPO, Fundraising, Board Nomination', desc: 'You have a hard deadline. The roadshow starts. The nomination committee is looking. Reputation now has a timeline.' },
-  { icon: '🛡', title: 'The Crisis Rebuilder', sub: 'Recovery & Narrative Reset', desc: 'One article. One incident. One search result. We engineer the narrative shift with Six Sigma precision, not PR spin.' },
-  { icon: '📈', title: 'The Scale-Seeking Consultant', sub: 'PR & Reputation Practitioners', desc: 'You have hit capacity doing this manually. ReputeOS 10x your client throughput and gives you statistical proof of results.' },
+  // Original 4 — kept and refined
+  { icon: '👤', title: 'The Invisible Architect', sub: 'Senior Executives & Leaders', desc: 'Deeply accomplished but digitally invisible. Your work is not speaking for itself because the internet has not heard about it yet. LSI typically starts at 18–42.' },
+  { icon: '⏱', title: 'The Pre-Event Sprinter', sub: 'IPO, Fundraise, Board Nomination', desc: 'You have a hard deadline. The roadshow starts in 90 days. The nomination committee is looking. Reputation now has a timeline — and a number.' },
+  { icon: '🛡', title: 'The Crisis Rebuilder', sub: 'Recovery & Narrative Reset', desc: 'One article. One incident. One search result. We engineer the narrative shift with Six Sigma precision. Not PR spin — statistical proof of recovery.' },
+  { icon: '📈', title: 'The Scale-Seeking Consultant', sub: 'PR & Reputation Practitioners', desc: 'You have hit capacity doing this manually. ReputeOS 10× your client throughput and gives you quantified proof of results to justify retainers.' },
+
+  // New sector-agnostic additions
+  { icon: '🎬', title: 'The Talent Seeking Control', sub: 'Film, Sport, Entertainment', desc: 'Your public image is your negotiating currency. Roles, endorsements, partnerships — all depend on how Google and media frame you. Take control.' },
+  { icon: '⚖️', title: 'The Professional Under Scrutiny', sub: 'Legal, Medical, Finance', desc: 'When trust is the product, perception is everything. A single narrative drift can cost clients, partnerships, or licenses. Protect what took decades to build.' },
+  { icon: '🎓', title: 'The Thought Leader Building Authority', sub: 'Academics, Researchers, Authors', desc: 'Ideas only spread as far as the credibility of the person behind them. Your LSI score is the gap between your knowledge and your influence.' },
+  { icon: '🏛️', title: 'The Public Figure Entering Politics', sub: 'Policy, Government, Civic Leadership', desc: 'Entering public life means your personal history becomes a campaign. Build the narrative before opponents do — or before the press does it for you.' },
+  { icon: '🌐', title: 'The Founder-to-CEO Transition', sub: 'Startup Founders Scaling Up', desc: 'Institutional investors, enterprise clients, and acquirers do not buy into companies. They buy into the founder. Your reputation IS your fundraising strategy.' },
+  { icon: '🏆', title: 'The Succession Candidate', sub: 'Next-Generation Family Office, Board', desc: 'When the next generation steps up, external credibility must match internal authority. Build the public profile that makes succession credible to outsiders.' },
+  { icon: '🌍', title: 'The Cross-Border Executive', sub: 'Indians Going Global', desc: 'Moving from APAC to London or New York? Your reputation is region-specific. A 72 LSI in India may be a 31 abroad. We help you carry it across markets.' },
+  { icon: '🔬', title: 'Anyone Whose Trust Is Their Business', sub: 'Any Sector, Any Stage', desc: 'Doctors. Architects. Fund managers. Tech founders. If clients Google you before they call you — and they do — you need to own what they find.' },
 ];
 
 export default function HomePage() {
@@ -127,7 +139,8 @@ export default function HomePage() {
       <section id="usecases" style={{ padding: '112px 24px' }}>
         <div style={{ maxWidth: 1280, margin: '0 auto' }}>
           <p style={{ fontFamily: mono, fontSize: 11, color: '#C9A84C', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>Who comes to ReputeOS</p>
-          <h2 style={{ fontSize: 'clamp(32px, 5vw, 48px)', fontWeight: 900, color: 'white', margin: '0 0 48px', lineHeight: 1.1 }}>Four types of people.<br />One urgent problem.</h2>
+          <h2 style={{ fontSize: 'clamp(32px, 5vw, 48px)', fontWeight: 900, color: 'white', margin: '0 0 16px', lineHeight: 1.1 }}>One platform. Every public figure.</h2>
+          <p style={{ color: 'rgba(255,255,255,0.33)', fontSize: 17, maxWidth: 560, marginBottom: 48 }}>If people Google you before they trust you — and they do — you need to engineer what they find. Sector doesn&apos;t matter. Credibility does.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(256px, 1fr))', gap: 16 }}>
             {USE_CASES.map(uc => (
               <div key={uc.title} style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: 24, backgroundColor: 'rgba(255,255,255,0.015)' }}>
@@ -244,18 +257,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer style={{ borderTop: '1px solid rgba(255,255,255,0.05)', padding: '36px 24px' }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Shield style={{ width: 16, height: 16, color: '#C9A84C' }} /><span style={{ fontWeight: 700, color: 'white', fontSize: 14 }}>ReputeOS</span></div>
-          <p style={{ fontFamily: mono, fontSize: 11, color: 'rgba(255,255,255,0.14)' }}>© {new Date().getFullYear()} ReputeOS. Strategic Reputation Engineering.</p>
-          <div style={{ display: 'flex', gap: 24, fontSize: 12, color: 'rgba(255,255,255,0.22)', flexWrap: 'wrap' }}>
-            <Link href="/pricing" style={{ color: 'inherit', textDecoration: 'none' }}>Pricing</Link>
-            <button onClick={openLogin} style={{ color: 'inherit', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontFamily: syne }}>Sign in</button>
-            <button onClick={openSignup} style={{ color: 'inherit', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontFamily: syne }}>Get started</button>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }
