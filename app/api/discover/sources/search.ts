@@ -7,9 +7,9 @@
 
 import { SourceResult, SourceModuleResult, ClientProfile, buildSearchQuery, isRelevant } from './types';
 import { generateDeepSearchQueries, flattenQuerySet } from '@/lib/ai/agents/query-generator';
+import { webSearch, newsSearch, scrapeUrl as _scrapeUrl } from '@/lib/api/fallback-search';
 
-
-
+// ─── Adapters: convert fallback-search results → SourceResult ───────────────
 
 async function serpSearch(
   params: Record<string, string>,
@@ -18,99 +18,39 @@ async function serpSearch(
   client: ClientProfile,
   limit = 8
 ): Promise<SourceResult[]> {
-  if (!process.env.SERPAPI_KEY) return [];
-  try {
-    const url = new URL('https://serpapi.com/search');
-    url.searchParams.set('api_key', process.env.SERPAPI_KEY);
-    url.searchParams.set('num', String(limit));
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const query = params.q ?? params.query ?? '';
+  if (!query) return [];
 
-    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
-    const data = await res.json();
+  // Use the fallback chain — SerpAPI first, then Exa, Google CSE, Brave
+  const { results } = await webSearch(query, { num: limit, category });
 
-    const items: SourceResult[] = [];
-
-    // Organic results
-    for (const r of data.organic_results ?? []) {
-      items.push({
-        source: sourceName,
-        category,
-        url: r.link ?? '',
-        title: r.title ?? '',
-        snippet: r.snippet ?? '',
-        date: r.date,
-        metadata: { position: r.position, displayedLink: r.displayed_link },
-      });
-    }
-
-    // News results
-    for (const r of data.news_results ?? []) {
-      items.push({
-        source: sourceName,
-        category,
-        url: r.link ?? '',
-        title: r.title ?? '',
-        snippet: r.snippet ?? '',
-        date: r.date,
-        metadata: { source: r.source },
-      });
-    }
-
-    // Knowledge graph
-    if (data.knowledge_graph) {
-      const kg = data.knowledge_graph;
-      items.push({
-        source: 'Google Knowledge Panel',
-        category: 'search',
-        url: kg.website ?? `https://google.com/search?q=${encodeURIComponent(client.name)}`,
-        title: kg.title ?? client.name,
-        snippet: kg.description ?? '',
-        metadata: { type: kg.type, attributes: kg.attributes },
-      });
-    }
-
-    return items.slice(0, limit);
-  } catch (e) {
-    console.error(`SerpAPI ${sourceName} error:`, e);
-    return [];
-  }
+  return results.slice(0, limit).map(r => ({
+    source:   sourceName,
+    category,
+    url:      r.url,
+    title:    r.title,
+    snippet:  r.snippet,
+    date:     r.date,
+    metadata: { via: r.via },
+  })).filter(r => r.url && isRelevant(`${r.title} ${r.snippet}`, client.name));
 }
 
 async function exaSearch(query: string, numResults = 8, category = 'search'): Promise<SourceResult[]> {
-  if (!process.env.EXA_API_KEY) return [];
-  try {
-    const res = await fetch('https://api.exa.ai/search', {
-      method: 'POST',
-      headers: { 'x-api-key': process.env.EXA_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query,
-        numResults,
-        useAutoprompt: true,
-        type: 'neural',
-        contents: { text: { maxCharacters: 500 } },
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
+  // Use fallback library — Exa first, then other providers
+  const { results } = await webSearch(query, { num: numResults, category });
 
-    return (data.results ?? []).map((r: {
-      url: string; title: string; text?: string; publishedDate?: string; author?: string;
-    }) => ({
-      source: 'Exa Neural Search',
-      category,
-      url: r.url,
-      title: r.title ?? '',
-      snippet: r.text?.slice(0, 400) ?? '',
-      date: r.publishedDate,
-      metadata: { author: r.author },
-    }));
-  } catch (e) {
-    console.error('Exa search error:', e);
-    return [];
-  }
+  return results.slice(0, numResults).map(r => ({
+    source:   'Exa Neural Search',
+    category,
+    url:      r.url,
+    title:    r.title,
+    snippet:  r.snippet,
+    date:     r.date,
+    metadata: { via: r.via },
+  }));
 }
+
+
 
 async function wikipediaSearch(name: string): Promise<SourceResult[]> {
   try {

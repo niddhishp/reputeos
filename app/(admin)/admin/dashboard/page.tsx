@@ -175,6 +175,67 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Search Provider Fallback Status */}
+      <ProviderFallbackStatus />
+    </div>
+  );
+}
+
+function ProviderFallbackStatus() {
+  const GOLD = '#C9A84C'; const MUTED = 'rgba(255,255,255,0.35)'; const font = "'Plus Jakarta Sans',system-ui,sans-serif"; const mono = "'DM Mono',monospace";
+  const card: React.CSSProperties = { padding:'20px 24px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:14 };
+
+  const search = [
+    { name:'SerpAPI',         env:'SERPAPI_KEY',           role:'Primary web search',  tier:1 },
+    { name:'Exa.ai',          env:'EXA_API_KEY',           role:'Neural search FB #1', tier:2 },
+    { name:'Google CSE',      env:'GOOGLE_SEARCH_API_KEY', role:'Free search FB #2',   tier:3 },
+    { name:'Brave Search',    env:'BRAVE_SEARCH_API_KEY',  role:'Paid search FB #3',   tier:4 },
+    { name:'NewsAPI',         env:'NEWSAPI_KEY',           role:'News fallback',        tier:2 },
+  ];
+  const scraping = [
+    { name:'Firecrawl',  env:'FIRECRAWL_API_KEY',   role:'Primary scraper',    tier:1 },
+    { name:'Jina.ai',    env:'__FREE__',             role:'Free scraper FB',    tier:2, alwaysOn:true },
+  ];
+  const ai = [
+    { name:'OpenRouter', env:'OPENROUTER_API_KEY',  role:'Primary AI router',  tier:1 },
+    { name:'Anthropic',  env:'ANTHROPIC_API_KEY',   role:'Direct AI FB #1',    tier:2 },
+    { name:'OpenAI',     env:'OPENAI_API_KEY',       role:'Direct AI FB #2',    tier:3 },
+  ];
+
+  return (
+    <div style={card}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
+        <div style={{ fontSize:12, color:MUTED, fontFamily:mono, letterSpacing:'0.05em', textTransform:'uppercase' }}>API Provider Fallback Map</div>
+        <div style={{ fontSize:11, color:MUTED, fontFamily:mono }}>🟢 key set &nbsp; 🔴 not configured</div>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }}>
+        {[['Search & News', search],['Scraping',scraping],['AI',ai]].map(([label, providers]) => (
+          <div key={label as string}>
+            <div style={{ fontSize:11, color:GOLD, fontFamily:mono, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:10 }}>{label as string}</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              {(providers as {name:string;env:string;role:string;tier:number;alwaysOn?:boolean}[]).map(p => {
+                const hasKey = p.alwaysOn || !!(typeof process !== 'undefined' && process.env?.[p.env]);
+                return (
+                  <div key={p.name} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:8 }}>
+                    <div>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ fontSize:11 }}>{p.alwaysOn ? '🟢' : '🔴'}</span>
+                        <span style={{ fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.75)', fontFamily:mono }}>{p.name}</span>
+                        <span style={{ fontSize:9, color:GOLD, border:`1px solid ${GOLD}30`, borderRadius:4, padding:'1px 5px' }}>T{p.tier}</span>
+                      </div>
+                      <div style={{ fontSize:10, color:MUTED, marginTop:2, marginLeft:18 }}>{p.role}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop:14, padding:'10px 14px', background:'rgba(201,168,76,0.05)', border:'1px solid rgba(201,168,76,0.15)', borderRadius:8, fontSize:12, color:MUTED }}>
+        ℹ️ &nbsp;Tiers execute in order (T1 → T2 → T3). If T1 hits quota or errors, T2 fires automatically with zero user impact. Jina.ai scraping is always available at no cost.
+      </div>
     </div>
   );
 }

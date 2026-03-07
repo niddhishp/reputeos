@@ -10,6 +10,7 @@
  */
 
 import { SourceResult, SourceModuleResult, ClientProfile, fetchRSS } from './types';
+import { newsSearch, webSearch } from '@/lib/api/fallback-search';
 
 const SERPAPI_KEY = () => process.env.SERPAPI_KEY ?? '';
 
@@ -59,59 +60,32 @@ function detectIndustryType(client: ClientProfile): 'entertainment' | 'tech' | '
   return 'general';
 }
 
-// ── Google News engine (SerpAPI) ─────────────────────────────────────────────
+// ── Google News engine (with fallback chain) ──────────────────────────────────
 
 /**
  * Google News is the MOST IMPORTANT search for press coverage.
- * It indexes Mid-Day, TOI, News18, IANS, Outlook India, DNA India, Gulf News etc.
- * Always run this with exact name + film/work title queries.
+ * Now uses fallback chain: SerpAPI Google News → Exa news → NewsAPI → Brave
  */
 async function googleNewsSearch(
   queries: string[],
   sourceName = 'Google News'
 ): Promise<SourceResult[]> {
-  if (!SERPAPI_KEY()) return [];
-
   const all: SourceResult[] = [];
 
-  // Run all queries in parallel
+  // Run all queries in parallel using fallback newsSearch
   const results = await Promise.allSettled(
     queries.map(async (q) => {
-      try {
-        const url = new URL('https://serpapi.com/search');
-        url.searchParams.set('api_key', SERPAPI_KEY());
-        url.searchParams.set('engine', 'google_news');
-        url.searchParams.set('q', q);
-        url.searchParams.set('gl', 'in');
-        url.searchParams.set('hl', 'en');
-        url.searchParams.set('num', '10');
-
-        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(12000) });
-        if (!res.ok) return [];
-        const data = await res.json();
-
-        const items: SourceResult[] = [];
-
-        // news_results is the main field for google_news engine
-        for (const r of [...(data.news_results ?? []), ...(data.organic_results ?? [])]) {
-          // Google News returns source name in result
-          const outlet = r.source?.name ?? r.displayed_link ?? sourceName;
-          items.push({
-            source: outlet,
-            category: 'news',
-            url: r.link ?? r.url ?? '',
-            title: r.title ?? '',
-            snippet: r.snippet ?? r.description ?? '',
-            date: r.date ?? r.published_date,
-            relevanceScore: 0.85,  // news coverage is high-relevance
-            metadata: { engine: 'google_news', query: q, outlet },
-          });
-        }
-
-        return items;
-      } catch {
-        return [];
-      }
+      const { results: found, provider } = await newsSearch(q, { num: 10 });
+      return found.map(r => ({
+        source: r.source !== 'serpapi' && r.source !== 'exa' ? r.source : sourceName,
+        category: 'news',
+        url:      r.url,
+        title:    r.title,
+        snippet:  r.snippet,
+        date:     r.date,
+        relevanceScore: 0.85,
+        metadata: { provider, query: q },
+      })) as SourceResult[];
     })
   );
 

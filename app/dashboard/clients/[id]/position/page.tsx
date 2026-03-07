@@ -6,7 +6,9 @@ import {
   Sparkles, RefreshCw, AlertTriangle, TrendingUp, TrendingDown,
   ChevronDown, ChevronUp, Copy, Check, Users, Zap, Eye,
   BarChart3, BookOpen, Target, Flame, Star, AlertCircle, CheckCircle,
+  ExternalLink, Dna, ArrowRight,
 } from 'lucide-react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 
 const GOLD   = '#C9A84C';
@@ -705,6 +707,126 @@ function ContentPillars({ pos, archName }: { pos: Record<string,unknown>; archNa
   );
 }
 
+// ── Influencer DNA Section ────────────────────────────────────────────────────
+function InfluencerDNASection({ clientId, archName }: { clientId: string; archName: string }) {
+  const [influencers, setInfluencers] = useState<Record<string,unknown>[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from('influencer_profiles')
+      .select('id, name, archetype, archetype_fit_score, content_quality_score, content_template, scan_status, linkedin_url')
+      .eq('client_id', clientId)
+      .order('archetype_fit_score', { ascending: false })
+      .limit(4)
+      .then(({ data }) => { setInfluencers(data ?? []); setLoading(false); });
+  }, [clientId]);
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 20 }}>
+        <div style={{ display:'flex', alignItems:'center', gap: 12 }}>
+          <div style={{ width:36, height:36, borderRadius:10, background:`${GOLD}18`, border:`1px solid ${GOLD}30`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Dna size={18} style={{ color: GOLD }} />
+          </div>
+          <div>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'white', margin:0 }}>Influencer Intelligence Hub</h3>
+            <p style={{ fontSize:12, color:MUTED, margin:0 }}>Study top {archName} voices · extract their content DNA · build templates</p>
+          </div>
+        </div>
+        <Link
+          href={`/dashboard/clients/${clientId}/position/influencers`}
+          style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'10px 18px', background:`${GOLD}18`, border:`1px solid ${GOLD}40`, borderRadius:10, color:GOLD, fontSize:13, fontWeight:700, textDecoration:'none' }}
+        >
+          Open Full Hub <ExternalLink size={13} />
+        </Link>
+      </div>
+
+      {/* Description card */}
+      <div style={{ padding:'20px 24px', background:'rgba(201,168,76,0.04)', border:`1px solid ${GOLD}20`, borderRadius:14, marginBottom: 20 }}>
+        <p style={{ fontSize:13, color:MUTED, margin:0, lineHeight:1.7 }}>
+          The Influencer Intelligence Hub identifies the top voices in your archetype — then reverse-engineers their exact content structure, emotional triggers, and linguistic patterns into reusable templates. Instead of guessing what works, you copy the DNA of what already works — then make it yours.
+        </p>
+        <div style={{ display:'flex', gap:24, marginTop:16, flexWrap:'wrap' }}>
+          {[
+            ['🎯', 'Archetype-matched voices'],
+            ['🧬', 'Content DNA extraction'],
+            ['📋', 'Fill-in-the-blanks templates'],
+            ['⚡', 'Direct use in Express module'],
+          ].map(([icon, label]) => (
+            <div key={label as string} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, color:'rgba(255,255,255,0.5)' }}>
+              <span>{icon}</span><span>{label as string}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Influencer cards or empty state */}
+      {loading ? (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px,1fr))', gap:14 }}>
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{ height:120, borderRadius:12, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', animation:'pulse 1.5s ease-in-out infinite' }} />
+          ))}
+        </div>
+      ) : influencers.length > 0 ? (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px,1fr))', gap:14 }}>
+          {influencers.map((inf) => {
+            const fitScore = (inf.archetype_fit_score as number) ?? 0;
+            const hasTemplate = !!(inf.content_template);
+            const status = inf.scan_status as string;
+            return (
+              <div key={inf.id as string} style={{ padding:18, background:'rgba(255,255,255,0.025)', border:`1px solid ${status === 'completed' ? GOLD+'25' : 'rgba(255,255,255,0.07)'}`, borderRadius:12 }}>
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10 }}>
+                  <div>
+                    <p style={{ fontSize:14, fontWeight:700, color:'white', margin:'0 0 3px' }}>{inf.name as string}</p>
+                    <p style={{ fontSize:11, color:MUTED, margin:0 }}>{inf.archetype as string || archName}</p>
+                  </div>
+                  {status === 'completed' && (
+                    <div style={{ padding:'3px 8px', background:`${GOLD}18`, border:`1px solid ${GOLD}30`, borderRadius:6, fontSize:10, color:GOLD, fontWeight:700 }}>
+                      {fitScore}% fit
+                    </div>
+                  )}
+                  {status === 'scanning' && (
+                    <div style={{ padding:'3px 8px', background:'rgba(59,130,246,0.1)', border:'1px solid rgba(59,130,246,0.3)', borderRadius:6, fontSize:10, color:'#60a5fa', fontWeight:700 }}>
+                      Scanning…
+                    </div>
+                  )}
+                </div>
+                <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                  {hasTemplate && (
+                    <span style={{ fontSize:10, color:'#4ade80', display:'flex', alignItems:'center', gap:4 }}>
+                      <CheckCircle size={10} /> Template ready
+                    </span>
+                  )}
+                  {!hasTemplate && status === 'completed' && (
+                    <span style={{ fontSize:10, color:MUTED }}>No template yet</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        // Empty state — invite to open hub
+        <div style={{ textAlign:'center', padding:'36px 24px', background:'rgba(255,255,255,0.015)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:14 }}>
+          <Dna size={32} style={{ color: GOLD, marginBottom: 14, opacity: 0.7 }} />
+          <h4 style={{ fontSize:15, fontWeight:700, color:'white', margin:'0 0 8px' }}>No influencers mapped yet</h4>
+          <p style={{ fontSize:13, color:MUTED, margin:'0 0 20px', maxWidth:380, marginLeft:'auto', marginRight:'auto' }}>
+            Open the Influencer Intelligence Hub to discover the top {archName} voices in your sector and extract their content DNA.
+          </p>
+          <Link
+            href={`/dashboard/clients/${clientId}/position/influencers`}
+            style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'12px 24px', background:GOLD, color:'#080C14', fontWeight:800, borderRadius:10, fontSize:14, textDecoration:'none' }}
+          >
+            Discover Influencers <ArrowRight size={14} />
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PositionPage() {
   const { id: clientId } = useParams() as { id: string };
@@ -801,6 +923,8 @@ export default function PositionPage() {
           <TransitionCaseStudies  reveal={reveal} />
           <FollowabilityBreakdown pos={pos} archName={(pos.personal_archetype as string) ?? ''} />
           <ContentPillars         pos={pos} archName={(pos.personal_archetype as string) ?? ''} />
+
+          <InfluencerDNASection   clientId={clientId} archName={(pos.personal_archetype as string) ?? ''} />
 
           <div style={{
             padding:'36px 40px',
