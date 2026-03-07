@@ -2,31 +2,63 @@
  * lib/ai/call.ts — Unified AI caller for ReputeOS
  * =================================================
  * Priority order: OpenRouter → Anthropic direct → OpenAI
- *
- * OpenRouter is first because the user's Anthropic direct key may have
- * zero credits, while OpenRouter credits are available.
- *
- * IMPORTANT: The `provider` field is OpenRouter-specific and must NEVER
- * be sent to Anthropic or OpenAI endpoints.
+ * Includes usage logging to api_usage_log table (fire-and-forget).
  */
+
+// Supabase client import is dynamic to avoid module-level env var issues
+async function logUsage(entry: {
+  service: string; operation: string; model: string;
+  user_id?: string; client_id?: string; scan_type?: string;
+  tokens_in?: number; tokens_out?: number; cost_usd?: number;
+  latency_ms?: number; status?: string; error_msg?: string;
+}) {
+  try {
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
+    await supabase.from('api_usage_log').insert(entry);
+  } catch {
+    // never let logging break the actual call
+  }
+}
+
+// Cost estimates per 1000 tokens (USD)
+const TOKEN_COSTS: Record<string, { in: number; out: number }> = {
+  'anthropic/claude-sonnet-4-6': { in: 0.003, out: 0.015 },
+  'anthropic/claude-haiku-4-5':  { in: 0.00025, out: 0.00125 },
+  'claude-sonnet-4-5-20251001':  { in: 0.003,   out: 0.015 },
+  'claude-haiku-4-5-20251001':   { in: 0.00025, out: 0.00125 },
+  'gpt-4o':                      { in: 0.005,   out: 0.015 },
+  'gpt-4o-mini':                 { in: 0.00015, out: 0.0006 },
+};
+
+function estimateCost(model: string, tokensIn: number, tokensOut: number): number {
+  const rates = TOKEN_COSTS[model] ?? { in: 0.003, out: 0.015 };
+  return (tokensIn / 1000) * rates.in + (tokensOut / 1000) * rates.out;
+}
 
 export interface AICallOptions {
   systemPrompt: string;
   userPrompt:   string;
-  json?:        boolean;   // request JSON response_format (default: true)
-  maxTokens?:   number;    // default 4000
-  temperature?: number;    // default 0.4
-  timeoutMs?:   number;    // default 55000
-  model?:       'fast' | 'smart'; // fast = haiku, smart = sonnet (default: smart)
+  json?:        boolean;
+  maxTokens?:   number;
+  temperature?: number;
+  timeoutMs?:   number;
+  model?:       'fast' | 'smart';
+  // For usage tracking
+  userId?:      string;
+  clientId?:    string;
+  scanType?:    string;
+  operation?:   string;
 }
 
 export interface AIResponse {
-  content:  string;
-  model:    string;
-  provider: string;
+  content:   string;
+  model:     string;
+  provider:  string;
+  tokensIn?:  number;
+  tokensOut?: number;
+  costUsd?:   number;
 }
-
-// ────────────────────────────────────────────────────────────────────────────
 
 export async function callAI(opts: AICallOptions): Promise<AIResponse> {
   const {
@@ -37,18 +69,20 @@ export async function callAI(opts: AICallOptions): Promise<AIResponse> {
     temperature = 0.4,
     timeoutMs   = 55_000,
     model       = 'smart',
+    userId, clientId, scanType,
+    operation   = 'chat_completion',
   } = opts;
 
   const openrouterKey = process.env.OPENROUTER_API_KEY;
   const anthropicKey  = process.env.ANTHROPIC_API_KEY;
   const openaiKey     = process.env.OPENAI_API_KEY;
+  const t0 = Date.now();
 
-  // ── 1. OpenRouter (preferred — routes to Bedrock, has credits) ──────────────
+  // ── 1. OpenRouter ────────────────────────────────────────────────────────────
   if (openrouterKey) {
-    // Confirmed working models on this OpenRouter account (verified 2026-03-05)
     const modelId = model === 'fast'
-      ? 'anthropic/claude-haiku-4-5'   // fast, cheap — haiku 4.5
-      : 'anthropic/claude-sonnet-4-6'; // best quality — sonnet 4.6
+      ? 'anthropic/claude-haiku-4-5'
+      : 'anthropic/claude-sonnet-4-6';
 
     const body: Record<string, unknown> = {
       model: modelId,
@@ -76,65 +110,63 @@ export async function callAI(opts: AICallOptions): Promise<AIResponse> {
     if (!res.ok) {
       const err = await res.text();
       console.error(`[callAI] OpenRouter ${res.status}:`, err.slice(0, 300));
-      // Fall through to next provider on any routing/auth/credit failure
-      // 401/402/403 = bad key or no credits
-      // 404 = model not available on selected provider (Bedrock not enabled)
-      // In all these cases, try the next provider rather than hard-failing
     } else {
       const data = await res.json() as {
         choices?: Array<{ message: { content: string } }>;
         model?: string;
+        usage?: { prompt_tokens: number; completion_tokens: number };
         error?: { message: string };
       };
 
-      if (data.error) {
-        throw new Error(`OpenRouter API error: ${data.error.message}`);
-      }
+      if (data.error) throw new Error(`OpenRouter API error: ${data.error.message}`);
 
       const content = data.choices?.[0]?.message?.content ?? '';
-      if (!content) {
-        throw new Error(`OpenRouter returned empty response for model ${modelId}. ` +
-          `Check your OpenRouter account at openrouter.ai — model may need a different provider.`);
-      }
+      if (!content) throw new Error(`OpenRouter returned empty response for model ${modelId}.`);
 
-      return { content, model: data.model ?? modelId, provider: 'openrouter' };
+      const tokensIn  = data.usage?.prompt_tokens     ?? 0;
+      const tokensOut = data.usage?.completion_tokens ?? 0;
+      const costUsd   = estimateCost(modelId, tokensIn, tokensOut);
+      const latency   = Date.now() - t0;
+
+      logUsage({ service: 'openrouter', operation, model: data.model ?? modelId,
+        user_id: userId, client_id: clientId, scan_type: scanType,
+        tokens_in: tokensIn, tokens_out: tokensOut, cost_usd: costUsd, latency_ms: latency });
+
+      return { content, model: data.model ?? modelId, provider: 'openrouter', tokensIn, tokensOut, costUsd };
     }
   }
 
   // ── 2. Anthropic direct ─────────────────────────────────────────────────────
   if (anthropicKey) {
-    const modelId = model === 'fast'
-      ? 'claude-haiku-4-5-20251001'
-      : 'claude-sonnet-4-5-20251001';
+    const modelId = model === 'fast' ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-5-20251001';
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method:  'POST',
       headers: {
-        'x-api-key':         anthropicKey,
-        'anthropic-version': '2023-06-01',
-        'content-type':      'application/json',
+        'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        model:       modelId,
-        max_tokens:  maxTokens,
-        temperature,
-        system:      systemPrompt,
-        messages:    [{ role: 'user', content: userPrompt }],
-      }),
+      body: JSON.stringify({ model: modelId, max_tokens: maxTokens, temperature,
+        system: systemPrompt, messages: [{ role: 'user', content: userPrompt }] }),
       signal: AbortSignal.timeout(timeoutMs),
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Anthropic API error ${res.status}: ${err.slice(0, 300)}`);
-    }
+    if (!res.ok) { const err = await res.text(); throw new Error(`Anthropic API error ${res.status}: ${err.slice(0, 300)}`); }
 
     const data = await res.json() as {
       content: Array<{ type: string; text: string }>;
       model: string;
+      usage?: { input_tokens: number; output_tokens: number };
     };
     const text = data.content.find(b => b.type === 'text')?.text ?? '';
-    return { content: text, model: data.model ?? modelId, provider: 'anthropic' };
+    const tokensIn  = data.usage?.input_tokens  ?? 0;
+    const tokensOut = data.usage?.output_tokens ?? 0;
+    const costUsd   = estimateCost(modelId, tokensIn, tokensOut);
+
+    logUsage({ service: 'anthropic', operation, model: modelId,
+      user_id: userId, client_id: clientId, scan_type: scanType,
+      tokens_in: tokensIn, tokens_out: tokensOut, cost_usd: costUsd, latency_ms: Date.now() - t0 });
+
+    return { content: text, model: data.model ?? modelId, provider: 'anthropic', tokensIn, tokensOut, costUsd };
   }
 
   // ── 3. OpenAI ────────────────────────────────────────────────────────────────
@@ -142,48 +174,69 @@ export async function callAI(opts: AICallOptions): Promise<AIResponse> {
     const modelId = model === 'fast' ? 'gpt-4o-mini' : 'gpt-4o';
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiKey}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user',   content: userPrompt },
-        ],
-        max_tokens:  maxTokens,
-        temperature,
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelId,
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+        max_tokens: maxTokens, temperature,
         ...(json ? { response_format: { type: 'json_object' } } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`OpenAI error ${res.status}: ${err.slice(0, 300)}`);
-    }
+    if (!res.ok) { const err = await res.text(); throw new Error(`OpenAI error ${res.status}: ${err.slice(0, 300)}`); }
 
-    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
-    const content = data.choices?.[0]?.message?.content ?? '';
-    return { content, model: modelId, provider: 'openai' };
+    const data = await res.json() as {
+      choices: Array<{ message: { content: string } }>;
+      usage?: { prompt_tokens: number; completion_tokens: number };
+    };
+    const content  = data.choices?.[0]?.message?.content ?? '';
+    const tokensIn  = data.usage?.prompt_tokens     ?? 0;
+    const tokensOut = data.usage?.completion_tokens ?? 0;
+    const costUsd   = estimateCost(modelId, tokensIn, tokensOut);
+
+    logUsage({ service: 'openai', operation, model: modelId,
+      user_id: userId, client_id: clientId, scan_type: scanType,
+      tokens_in: tokensIn, tokens_out: tokensOut, cost_usd: costUsd, latency_ms: Date.now() - t0 });
+
+    return { content, model: modelId, provider: 'openai', tokensIn, tokensOut, costUsd };
   }
 
   throw new Error(
     'No AI API key configured or all keys failed. ' +
-    'Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY in Vercel environment variables.'
+    'Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY.'
   );
 }
 
-/**
- * Parse JSON from AI response — strips markdown fences if present.
- */
 export function parseAIJson<T = unknown>(content: string): T {
   const cleaned = content
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
+    .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
   return JSON.parse(cleaned) as T;
+}
+
+/** Log an external API call (SerpAPI, Exa, Firecrawl, etc.) */
+export async function logApiCall(entry: {
+  service: 'serpapi' | 'exa' | 'firecrawl' | 'apify' | string;
+  operation: string;
+  userId?: string;
+  clientId?: string;
+  scanType?: string;
+  costUsd?: number;
+  latencyMs?: number;
+  status?: 'success' | 'error' | 'timeout';
+  errorMsg?: string;
+  results?: number;
+}) {
+  logUsage({
+    service:    entry.service,
+    operation:  entry.operation,
+    model:      '',
+    user_id:    entry.userId,
+    client_id:  entry.clientId,
+    scan_type:  entry.scanType,
+    cost_usd:   entry.costUsd,
+    latency_ms: entry.latencyMs,
+    status:     entry.status ?? 'success',
+    error_msg:  entry.errorMsg,
+  });
 }

@@ -113,19 +113,41 @@ export function getContentRateLimiter(): Ratelimit {
   return _contentRateLimiter;
 }
 
+// ─── Graceful fallback helper ─────────────────────────────────────────────────
+// If Upstash Redis is not configured, return a pass-through limiter so the app
+// doesn't crash. Logs a warning on first miss.
+let _warnedAboutMissingRedis = false;
+function safeLimiter(getter: () => Ratelimit): Ratelimit {
+  return new Proxy({} as Ratelimit, {
+    get: (_, p) => {
+      try {
+        return getter()[p as keyof Ratelimit];
+      } catch (e) {
+        if (!_warnedAboutMissingRedis) {
+          console.warn('[ratelimit] Redis not configured — rate limiting disabled. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.');
+          _warnedAboutMissingRedis = true;
+        }
+        // Return a pass-through for the `limit` method; undefined for everything else
+        if (p === 'limit') return async (_identifier: string) => ({ success: true, limit: 999, remaining: 999, reset: 0 });
+        return undefined;
+      }
+    }
+  });
+}
+
 // ─── Backwards-compatible named exports (for routes that import the old names) ─
 /** @deprecated Use getStandardRateLimiter() */
-export const standardRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getStandardRateLimiter()[p as keyof Ratelimit] });
+export const standardRateLimiter = safeLimiter(getStandardRateLimiter);
 /** @deprecated Use getStrictRateLimiter() */
-export const strictRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getStrictRateLimiter()[p as keyof Ratelimit] });
+export const strictRateLimiter = safeLimiter(getStrictRateLimiter);
 /** @deprecated Use getAiRateLimiter() */
-export const aiRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getAiRateLimiter()[p as keyof Ratelimit] });
+export const aiRateLimiter = safeLimiter(getAiRateLimiter);
 /** @deprecated Use getDiscoveryRateLimiter() */
-export const discoveryRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getDiscoveryRateLimiter()[p as keyof Ratelimit] });
+export const discoveryRateLimiter = safeLimiter(getDiscoveryRateLimiter);
 /** @deprecated Use getLsiRateLimiter() */
-export const lsiRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getLsiRateLimiter()[p as keyof Ratelimit] });
+export const lsiRateLimiter = safeLimiter(getLsiRateLimiter);
 /** @deprecated Use getContentRateLimiter() */
-export const contentRateLimiter = new Proxy({} as Ratelimit, { get: (_, p) => getContentRateLimiter()[p as keyof Ratelimit] });
+export const contentRateLimiter = safeLimiter(getContentRateLimiter);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 export interface RateLimitResult {

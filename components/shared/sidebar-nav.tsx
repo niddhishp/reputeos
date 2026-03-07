@@ -147,6 +147,9 @@ export function SidebarNav({ user, role = 'consultant' }: SidebarNavProps) {
       {/* Bottom */}
       <div style={{ padding: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <NavLink href="/dashboard/settings" label="Settings" icon={Settings} />
+        {(role === 'admin' || role === 'superadmin') && (
+          <NavLink href="/admin/dashboard" label="Admin" icon={Shield} />
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: collapsed ? '6px 0' : '8px 12px', justifyContent: collapsed ? 'center' : 'flex-start', marginTop: 4 }}>
           {!collapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>

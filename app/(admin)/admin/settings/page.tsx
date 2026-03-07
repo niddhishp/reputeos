@@ -1,403 +1,306 @@
-/**
- * Admin Settings
- * 
- * System configuration and settings management for administrators.
- */
-
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+'use client';
+import { useEffect, useState, useCallback } from 'react';
 import {
-  AlertTriangle,
-  Save,
-  Shield,
-  Mail,
-  Bell,
-  CreditCard,
-  Database,
+  Key, AlertTriangle, CheckCircle, XCircle, RefreshCw,
+  Copy, Eye, EyeOff, Zap, Globe, ToggleLeft, ToggleRight, ExternalLink,
 } from 'lucide-react';
 
-export const metadata = {
-  title: 'Settings | Admin | ReputeOS',
-  description: 'System configuration and settings',
-};
+const G='#C9A84C', BG='#0d1117', BD='rgba(201,168,76,0.12)', MT='rgba(255,255,255,0.35)', TX='rgba(255,255,255,0.75)';
+const F="'Plus Jakarta Sans',system-ui,sans-serif", M="'DM Mono',monospace";
 
-export default async function AdminSettingsPage() {
+const ENV_VARS = [
+  { key:'OPENROUTER_API_KEY',             label:'OpenRouter',       group:'AI',       docsUrl:'https://openrouter.ai/settings/keys',               critical:true  },
+  { key:'ANTHROPIC_API_KEY',              label:'Anthropic',        group:'AI',       docsUrl:'https://console.anthropic.com/settings/keys',       critical:false },
+  { key:'OPENAI_API_KEY',                 label:'OpenAI',           group:'AI',       docsUrl:'https://platform.openai.com/api-keys',              critical:false },
+  { key:'SERPAPI_API_KEY',                label:'SerpAPI',          group:'Search',   docsUrl:'https://serpapi.com/dashboard',                     critical:true  },
+  { key:'EXA_API_KEY',                    label:'Exa.ai',           group:'Search',   docsUrl:'https://dashboard.exa.ai/api-keys',                 critical:false },
+  { key:'FIRECRAWL_API_KEY',              label:'Firecrawl',        group:'Scraping', docsUrl:'https://www.firecrawl.dev/app/api-keys',            critical:false },
+  { key:'APIFY_API_TOKEN',                label:'Apify',            group:'Scraping', docsUrl:'https://console.apify.com/account/integrations',    critical:false },
+  { key:'NEXT_PUBLIC_SUPABASE_URL',       label:'Supabase URL',     group:'Database', docsUrl:'https://app.supabase.com/project/_/settings/api',  critical:true  },
+  { key:'NEXT_PUBLIC_SUPABASE_ANON_KEY',  label:'Supabase Anon',    group:'Database', docsUrl:'https://app.supabase.com/project/_/settings/api',  critical:true  },
+  { key:'SUPABASE_SERVICE_ROLE_KEY',      label:'Supabase Service', group:'Database', docsUrl:'https://app.supabase.com/project/_/settings/api',  critical:true  },
+  { key:'NEXT_PUBLIC_APP_URL',            label:'App URL',          group:'Config',   docsUrl:'https://vercel.com/dashboard',                     critical:false },
+] as const;
+
+const GROUPS = ['AI','Search','Scraping','Database','Config'] as const;
+const GROUP_COLOR: Record<string,string> = { AI:'#8b5cf6', Search:'#3b82f6', Scraping:'#f97316', Database:'#10b981', Config:G };
+
+interface Feature { key:string; label:string; description:string; enabled:boolean; tag?:string }
+const DEFAULT_FEATURES: Feature[] = [
+  { key:'discover_scan',      label:'Discovery Scan',           description:'Run automated digital footprint scans',       enabled:true },
+  { key:'lsi_scoring',        label:'LSI Scoring',              description:'Calculate reputation scores (LSI)',           enabled:true },
+  { key:'ai_archetype',       label:'AI Archetype Assignment',  description:'Use AI to assign strategic archetypes',       enabled:true },
+  { key:'content_generation', label:'Content Generation',       description:'AI-powered thought leadership content',       enabled:true },
+  { key:'shield_legal',       label:'Shield Pro — Legal',       description:'Legal database scan (agency+ only)',          enabled:true, tag:'AGENCY+' },
+  { key:'board_reports',      label:'Board Reports (PDF/PPTX)', description:'Export polished reports',                    enabled:true },
+  { key:'influencer_intel',   label:'Influencer Intelligence',  description:'Discover and analyse target influencers',    enabled:true },
+  { key:'ai_narrative',       label:'AI Narrative Layer',       description:'Generate plain-language reputation narratives', enabled:true },
+];
+
+function Section({ title, icon:Icon, children }: { title:string; icon:React.ElementType; children:React.ReactNode }) {
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-neutral-900">Settings</h1>
-        <p className="text-neutral-600 mt-1">
-          Configure system-wide settings and preferences
-        </p>
+    <div style={{ background:BG, border:`1px solid ${BD}`, borderRadius:12, overflow:'hidden' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'15px 22px', borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+        <Icon style={{ width:14, color:G }} />
+        <span style={{ fontSize:13, fontWeight:700, color:'rgba(255,255,255,0.85)' }}>{title}</span>
       </div>
-
-      {/* Warning Banner */}
-      <Alert variant="warning">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>Careful!</AlertTitle>
-        <AlertDescription>
-          Changes to these settings affect all users. Make sure you understand the impact before saving.
-        </AlertDescription>
-      </Alert>
-
-      {/* Settings Sections */}
-      <div className="space-y-6">
-        {/* General Settings */}
-        <GeneralSettings />
-
-        {/* Security Settings */}
-        <SecuritySettings />
-
-        {/* Notification Settings */}
-        <NotificationSettings />
-
-        {/* AI Settings */}
-        <AISettings />
-
-        {/* Maintenance */}
-        <MaintenanceSettings />
-      </div>
+      <div style={{ padding:'20px 22px' }}>{children}</div>
     </div>
   );
 }
 
-function GeneralSettings() {
+export default function SettingsPage() {
+  const [envStatus, setEnvStatus] = useState<Record<string,'present'|'missing'|'loading'>>({});
+  const [envLoading, setEnvLoading] = useState(false);
+  const [features, setFeatures]     = useState<Feature[]>(DEFAULT_FEATURES);
+  const [copied, setCopied]          = useState(false);
+  const [revealKeys, setRevealKeys]  = useState(false);
+  const [dangerMsg, setDangerMsg]    = useState('');
+
+  const checkEnv = useCallback(async () => {
+    setEnvLoading(true);
+    try {
+      const r = await fetch('/api/debug/env-check');
+      const d = await r.json() as Record<string, unknown>;
+      const status: Record<string,'present'|'missing'> = {};
+      // env-check now returns flat { KEY: true|false, present:[...], missing:[...] }
+      for (const [k, v] of Object.entries(d)) {
+        // Only process env var keys (all caps with underscores), skip 'present'/'missing' arrays
+        if (/^[A-Z][A-Z0-9_]+$/.test(k)) {
+          status[k] = v === true ? 'present' : 'missing';
+        }
+      }
+      setEnvStatus(status);
+    } catch { /* silent */ }
+    setEnvLoading(false);
+  }, []);
+
+  useEffect(() => { checkEnv(); }, [checkEnv]);
+
+  function copyTemplate() {
+    const lines = ENV_VARS.map(v => `${v.key}=`).join('\n');
+    navigator.clipboard.writeText(lines);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function runDanger(label: string, fn: () => Promise<string>) {
+    setDangerMsg('Running…');
+    try { setDangerMsg(await fn()); }
+    catch(e) { setDangerMsg(e instanceof Error ? e.message : 'Failed'); }
+    setTimeout(() => setDangerMsg(''), 4000);
+  }
+
+  const missingCritical = ENV_VARS.filter(v => v.critical && envStatus[v.key] === 'missing');
+  const presentCount = Object.values(envStatus).filter(v=>v==='present').length;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-5 w-5" />
-          General Settings
-        </CardTitle>
-        <CardDescription>
-          Basic platform configuration
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="app-name">Application Name</Label>
-            <Input
-              id="app-name"
-              defaultValue="ReputeOS"
-              placeholder="Enter application name"
-            />
-          </div>
+    <div style={{ display:'flex', flexDirection:'column', gap:22, fontFamily:F }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-          <div className="grid gap-2">
-            <Label htmlFor="support-email">Support Email</Label>
-            <Input
-              id="support-email"
-              type="email"
-              defaultValue="support@reputeos.com"
-              placeholder="support@example.com"
-            />
-          </div>
+      <div>
+        <h1 style={{ fontSize:22, fontWeight:800, color:'rgba(255,255,255,0.9)', letterSpacing:'-0.02em', marginBottom:4 }}>Settings</h1>
+        <p style={{ fontSize:12, color:MT, fontFamily:M }}>Environment config · Feature flags · System health</p>
+      </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="default-timezone">Default Timezone</Label>
-            <select
-              id="default-timezone"
-              className="px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              defaultValue="UTC"
-            >
-              <option value="UTC">UTC</option>
-              <option value="America/New_York">Eastern Time (ET)</option>
-              <option value="America/Chicago">Central Time (CT)</option>
-              <option value="America/Denver">Mountain Time (MT)</option>
-              <option value="America/Los_Angeles">Pacific Time (PT)</option>
-              <option value="Europe/London">London (GMT)</option>
-              <option value="Europe/Paris">Paris (CET)</option>
-              <option value="Asia/Tokyo">Tokyo (JST)</option>
-            </select>
+      {missingCritical.length > 0 && (
+        <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'14px 18px', background:'rgba(239,68,68,0.06)', border:'1px solid rgba(239,68,68,0.25)', borderRadius:10 }}>
+          <AlertTriangle style={{ width:14, color:'#ef4444', flexShrink:0, marginTop:1 }} />
+          <div style={{ fontSize:12, color:TX, lineHeight:1.6 }}>
+            <strong style={{ color:'#ef4444' }}>Critical keys missing: </strong>
+            {missingCritical.map(v=>v.label).join(', ')} — set in Vercel → Project → Settings → Environment Variables.
+          </div>
+        </div>
+      )}
+
+      {/* ENV VARS */}
+      <Section title="Environment Variables" icon={Key}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:10 }}>
+          <span style={{ fontSize:12, color:MT }}>
+            {envLoading ? 'Checking…' : `${presentCount} / ${ENV_VARS.length} keys detected`}
+          </span>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={copyTemplate} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 13px', border:`1px solid ${BD}`, borderRadius:8, background:'none', color:MT, fontSize:12, cursor:'pointer', fontFamily:F }}>
+              <Copy style={{ width:12 }} />{copied ? 'Copied!' : '.env template'}
+            </button>
+            <button onClick={checkEnv} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 13px', border:`1px solid ${BD}`, borderRadius:8, background:'none', color:MT, fontSize:12, cursor:'pointer', fontFamily:F }}>
+              <RefreshCw style={{ width:12, animation:envLoading?'spin 1s linear infinite':undefined }} /> Recheck
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>User Registration</Label>
-            <p className="text-sm text-neutral-500">
-              Allow new users to sign up
-            </p>
-          </div>
-          <Switch defaultChecked />
+        {GROUPS.map(group => {
+          const vars = ENV_VARS.filter(v => v.group === group);
+          const gc = GROUP_COLOR[group];
+          return (
+            <div key={group} style={{ marginBottom:18 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:gc, fontFamily:M, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+                <div style={{ width:6, height:6, borderRadius:'50%', background:gc }}/>{group}
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                {vars.map(v => {
+                  const st = envStatus[v.key];
+                  return (
+                    <div key={v.key} style={{ display:'grid', gridTemplateColumns:'180px 1fr 24px 24px', gap:12, alignItems:'center', padding:'9px 14px', background:'rgba(255,255,255,0.02)', border:`1px solid ${st==='missing'&&v.critical?'rgba(239,68,68,0.2)':'rgba(255,255,255,0.05)'}`, borderRadius:8 }}>
+                      <div>
+                        <div style={{ fontSize:12, fontWeight:600, color:TX }}>{v.label}</div>
+                        {v.critical && <div style={{ fontSize:9, color:'#ef4444', fontFamily:M }}>REQUIRED</div>}
+                      </div>
+                      <code style={{ fontSize:10, color:MT, fontFamily:M, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {revealKeys ? v.key : v.key.slice(0,12)+'…'}
+                      </code>
+                      <div style={{ display:'flex', justifyContent:'center' }}>
+                        {st === undefined || envLoading
+                          ? <div style={{ width:11, height:11, border:'1px solid rgba(255,255,255,0.2)', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 1s linear infinite' }}/>
+                          : st === 'present'
+                            ? <CheckCircle style={{ width:14, color:'#10b981' }}/>
+                            : <XCircle style={{ width:14, color: v.critical ? '#ef4444' : '#f59e0b' }}/>
+                        }
+                      </div>
+                      <a href={v.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color:MT, display:'flex', justifyContent:'center' }}>
+                        <ExternalLink style={{ width:12 }}/>
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+
+        <button onClick={()=>setRevealKeys(!revealKeys)} style={{ display:'flex', alignItems:'center', gap:6, background:'none', border:'none', cursor:'pointer', color:MT, fontFamily:F, fontSize:12, marginTop:6 }}>
+          {revealKeys ? <EyeOff style={{ width:12 }}/> : <Eye style={{ width:12 }}/>}
+          {revealKeys ? 'Hide key names' : 'Show full key names'}
+        </button>
+      </Section>
+
+      {/* FEATURE FLAGS */}
+      <Section title="Feature Flags" icon={ToggleRight}>
+        <div style={{ fontSize:12, color:MT, marginBottom:14 }}>In-memory toggles. Persisted per-session only — real persistence needs a DB feature_flags table.</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+          {features.map(f => (
+            <div key={f.key} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:20, alignItems:'center', padding:'12px 14px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:9 }}>
+              <div>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:13, fontWeight:600, color:TX }}>{f.label}</span>
+                  {f.tag && <span style={{ fontSize:9, fontWeight:700, color:G, background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.2)', borderRadius:4, padding:'1px 6px', fontFamily:M }}>{f.tag}</span>}
+                </div>
+                <div style={{ fontSize:11, color:MT, marginTop:2 }}>{f.description}</div>
+              </div>
+              <button onClick={()=>setFeatures(fs=>fs.map(x=>x.key===f.key?{...x,enabled:!x.enabled}:x))} style={{ display:'flex', alignItems:'center', gap:5, background:'none', border:'none', cursor:'pointer', color:f.enabled?'#10b981':MT, padding:0, fontFamily:F }}>
+                {f.enabled ? <ToggleRight style={{ width:26 }}/> : <ToggleLeft style={{ width:26 }}/>}
+                <span style={{ fontSize:11, fontFamily:M }}>{f.enabled?'ON':'OFF'}</span>
+              </button>
+            </div>
+          ))}
         </div>
+      </Section>
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>Email Verification Required</Label>
-            <p className="text-sm text-neutral-500">
-              Require email verification before accessing the platform
-            </p>
-          </div>
-          <Switch defaultChecked />
+      {/* PLAN REFERENCE */}
+      <Section title="Plan Limits Reference" icon={Zap}>
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ borderBottom:`1px solid ${BD}` }}>
+                {['Plan','Clients','Scans/mo','AI Calls/mo','Reports','Shield Pro'].map(h=>(
+                  <th key={h} style={{ padding:'8px 14px', textAlign:'left', color:MT, fontSize:10, fontFamily:M, textTransform:'uppercase', letterSpacing:'0.05em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['Free','1','2','20','—','—'],
+                ['Individual','3','10','100','PDF','—'],
+                ['Professional','10','50','500','PDF+PPTX','—'],
+                ['Agency','50','200','2000','All','✓'],
+                ['Enterprise','Unlimited','Unlimited','Unlimited','All','✓'],
+              ].map(([plan,...cols])=>(
+                <tr key={plan} style={{ borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding:'10px 14px', color:G, fontWeight:700, fontFamily:M }}>{plan}</td>
+                  {cols.map((c,i)=>(
+                    <td key={i} style={{ padding:'10px 14px', color:c==='✓'?'#10b981':c==='—'?MT:TX, fontFamily:M }}>{c}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      </Section>
 
-        <Button className="w-full sm:w-auto">
-          <Save className="h-4 w-4 mr-2" />
-          Save Changes
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SecuritySettings() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Shield className="h-5 w-5" />
-          Security Settings
-        </CardTitle>
-        <CardDescription>
-          Configure security and access controls
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="max-login-attempts">Max Login Attempts</Label>
-            <Input
-              id="max-login-attempts"
-              type="number"
-              defaultValue="5"
-              min="1"
-              max="10"
-            />
-            <p className="text-sm text-neutral-500">
-              Number of failed attempts before temporary lockout
-            </p>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="session-timeout">Session Timeout (hours)</Label>
-            <Input
-              id="session-timeout"
-              type="number"
-              defaultValue="24"
-              min="1"
-              max="168"
-            />
-          </div>
+      {/* DANGER ZONE */}
+      <Section title="Danger Zone" icon={AlertTriangle}>
+        {dangerMsg && (
+          <div style={{ padding:'10px 14px', background:'rgba(201,168,76,0.06)', border:`1px solid ${BD}`, borderRadius:8, fontSize:12, color:G, fontFamily:M, marginBottom:14 }}>{dangerMsg}</div>
+        )}
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {[
+            {
+              label:'Check Database Connection',
+              desc:'Ping Supabase and count tables.',
+              color:'#3b82f6',
+              fn: async () => {
+                const { supabase } = await import('@/lib/supabase/client');
+                const { count } = await supabase.from('clients').select('*',{count:'exact',head:true});
+                return `DB OK — ${count??0} clients in table`;
+              },
+            },
+            {
+              label:'Flush Demo Clients',
+              desc:'Delete all clients where is_demo = true.',
+              color:'#f59e0b',
+              fn: async () => {
+                if (!confirm('Delete all demo clients? Cannot be undone.')) return 'Cancelled';
+                const { supabase } = await import('@/lib/supabase/client');
+                const { error } = await supabase.from('clients').delete().eq('is_demo',true);
+                return error ? `Error: ${error.message}` : 'Demo clients deleted';
+              },
+            },
+            {
+              label:'Prune Old API Usage Logs (30d+)',
+              desc:'Remove api_usage_log rows older than 30 days.',
+              color:'#ef4444',
+              fn: async () => {
+                if (!confirm('Delete api_usage_log rows older than 30 days?')) return 'Cancelled';
+                const cutoff = new Date(Date.now()-30*86400_000).toISOString();
+                const { supabase } = await import('@/lib/supabase/client');
+                const { error, count } = await supabase.from('api_usage_log').delete({count:'exact'}).lt('created_at',cutoff);
+                return error ? `Error: ${error.message}` : `Deleted ${count??0} rows`;
+              },
+            },
+          ].map(item => (
+            <div key={item.label} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 16px', background:`${item.color}08`, border:`1px solid ${item.color}22`, borderRadius:9 }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:TX }}>{item.label}</div>
+                <div style={{ fontSize:11, color:MT, marginTop:2 }}>{item.desc}</div>
+              </div>
+              <button onClick={()=>runDanger(item.label, item.fn)} style={{ padding:'7px 15px', border:`1px solid ${item.color}50`, borderRadius:8, background:`${item.color}10`, color:item.color, fontSize:12, cursor:'pointer', fontFamily:F, flexShrink:0, marginLeft:14 }}>
+                Run
+              </button>
+            </div>
+          ))}
         </div>
+      </Section>
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>Two-Factor Authentication</Label>
-            <p className="text-sm text-neutral-500">
-              Require 2FA for admin accounts
-            </p>
-          </div>
-          <Switch />
+      {/* QUICK LINKS */}
+      <Section title="Quick Links" icon={Globe}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:8 }}>
+          {[
+            ['Supabase Dashboard',  'https://app.supabase.com'],
+            ['Vercel Dashboard',    'https://vercel.com/dashboard'],
+            ['OpenRouter Account',  'https://openrouter.ai/account'],
+            ['SerpAPI Dashboard',   'https://serpapi.com/dashboard'],
+            ['Exa Dashboard',       'https://dashboard.exa.ai'],
+            ['Firecrawl Dashboard', 'https://www.firecrawl.dev/app'],
+          ].map(([label,url])=>(
+            <a key={label} href={url} target="_blank" rel="noopener noreferrer" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'11px 14px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:8, textDecoration:'none', color:TX, fontSize:12 }}>
+              {label} <ExternalLink style={{ width:11, color:MT }}/>
+            </a>
+          ))}
         </div>
+      </Section>
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>IP Allowlist</Label>
-            <p className="text-sm text-neutral-500">
-              Restrict admin access to specific IP addresses
-            </p>
-          </div>
-          <Switch />
-        </div>
-
-        <Button className="w-full sm:w-auto">
-          <Save className="h-4 w-4 mr-2" />
-          Save Changes
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function NotificationSettings() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="h-5 w-5" />
-          Notification Settings
-        </CardTitle>
-        <CardDescription>
-          Configure system notifications and alerts
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>New User Notifications</Label>
-            <p className="text-sm text-neutral-500">
-              Send email when a new user signs up
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>Security Alerts</Label>
-            <p className="text-sm text-neutral-500">
-              Send email for security-related events
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>Weekly Reports</Label>
-            <p className="text-sm text-neutral-500">
-              Send weekly system analytics report
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <Separator />
-
-        <div className="grid gap-2">
-          <Label htmlFor="admin-emails">Admin Notification Emails</Label>
-          <Input
-            id="admin-emails"
-            placeholder="admin1@example.com, admin2@example.com"
-          />
-          <p className="text-sm text-neutral-500">
-            Comma-separated list of emails to receive notifications
-          </p>
-        </div>
-
-        <Button className="w-full sm:w-auto">
-          <Save className="h-4 w-4 mr-2" />
-          Save Changes
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function AISettings() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CreditCard className="h-5 w-5" />
-          AI Configuration
-        </CardTitle>
-        <CardDescription>
-          Configure AI provider settings and limits
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="ai-model">Default AI Model</Label>
-            <select
-              id="ai-model"
-              className="px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              defaultValue="gpt-4o"
-            >
-              <option value="gpt-4o">GPT-4o</option>
-              <option value="gpt-4o-mini">GPT-4o Mini</option>
-              <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-            </select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="max-tokens">Max Tokens per Request</Label>
-            <Input
-              id="max-tokens"
-              type="number"
-              defaultValue="2000"
-              min="100"
-              max="8000"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="daily-ai-limit">Daily AI Requests per User</Label>
-            <Input
-              id="daily-ai-limit"
-              type="number"
-              defaultValue="100"
-              min="10"
-              max="1000"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label>Content Moderation</Label>
-            <p className="text-sm text-neutral-500">
-              Enable AI content moderation for generated content
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <Button className="w-full sm:w-auto">
-          <Save className="h-4 w-4 mr-2" />
-          Save Changes
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MaintenanceSettings() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-red-600">
-          <AlertTriangle className="h-5 w-5" />
-          Maintenance
-        </CardTitle>
-        <CardDescription>
-          Danger zone - These actions cannot be undone
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
-          <div>
-            <h4 className="font-medium text-red-900">Maintenance Mode</h4>
-            <p className="text-sm text-red-700">
-              Put the site in maintenance mode. Only admins can access.
-            </p>
-          </div>
-          <Switch />
-        </div>
-
-        <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
-          <div>
-            <h4 className="font-medium text-red-900">Clear Cache</h4>
-            <p className="text-sm text-red-700">
-              Clear all cached data. May impact performance temporarily.
-            </p>
-          </div>
-          <Button variant="destructive" size="sm">
-            Clear Cache
-          </Button>
-        </div>
-
-        <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
-          <div>
-            <h4 className="font-medium text-red-900">Export All Data</h4>
-            <p className="text-sm text-red-700">
-              Download a complete backup of all platform data.
-            </p>
-          </div>
-          <Button variant="outline" size="sm">
-            Export Data
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      <div style={{ fontSize:11, color:'rgba(255,255,255,0.15)', fontFamily:M, textAlign:'center' }}>
+        ReputeOS Admin · env checks via /api/debug/env-check
+      </div>
+    </div>
   );
 }

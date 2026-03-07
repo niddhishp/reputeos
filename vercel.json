@@ -36,6 +36,15 @@
     },
     "app/api/discover/report/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/shield/legal-scan/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/discover/generate-report/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/lsi/narrative/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [

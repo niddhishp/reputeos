@@ -1,248 +1,122 @@
-/**
- * Admin Layout
- * 
- * This layout provides the admin dashboard shell with navigation,
- * header, and content area. It protects all admin routes.
- */
+'use client';
 
-import { redirect } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
-import { isAdmin } from '@/lib/admin/auth';
+import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Users,
-  Briefcase,
-  Settings,
-  BarChart3,
-  FileText,
-  Shield,
-  LogOut,
-  Menu,
-  X,
+  LayoutDashboard, Users, Activity, FileText,
+  Settings, Shield, LogOut, ChevronRight,
+  CreditCard, Terminal, BarChart3,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase/client';
 
-interface AdminLayoutProps {
-  children: React.ReactNode;
-}
+const GOLD    = '#C9A84C';
+const BG      = '#080C14';
+const SIDEBAR = '#0a0f1a';
+const BORDER  = 'rgba(201,168,76,0.1)';
+const MUTED   = 'rgba(255,255,255,0.3)';
 
-const adminNavItems = [
-  {
-    title: 'Dashboard',
-    href: '/admin/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    title: 'Users',
-    href: '/admin/users',
-    icon: Users,
-  },
-  {
-    title: 'Clients',
-    href: '/admin/clients',
-    icon: Briefcase,
-  },
-  {
-    title: 'Analytics',
-    href: '/admin/analytics',
-    icon: BarChart3,
-  },
-  {
-    title: 'System Logs',
-    href: '/admin/logs',
-    icon: FileText,
-  },
-  {
-    title: 'Settings',
-    href: '/admin/settings',
-    icon: Settings,
-  },
+const NAV = [
+  { href: '/admin/dashboard',     icon: LayoutDashboard, label: 'Overview' },
+  { href: '/admin/users',         icon: Users,           label: 'Users' },
+  { href: '/admin/subscriptions', icon: CreditCard,      label: 'Subscriptions' },
+  { href: '/admin/api-usage',     icon: Activity,        label: 'API Usage' },
+  { href: '/admin/prompts',       icon: Terminal,        label: 'Prompt Editor' },
+  { href: '/admin/logs',          icon: FileText,        label: 'Scan Logs' },
+  { href: '/admin/settings',      icon: Settings,        label: 'Settings' },
 ];
 
-export default async function AdminLayout({ children }: AdminLayoutProps) {
-  // Check if user is admin
-  const userIsAdmin = await isAdmin();
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router   = useRouter();
+  const [email, setEmail]   = useState('');
+  const [authed, setAuthed] = useState(false);
+  const [ready,  setReady]  = useState(false);
+  const font = "'Plus Jakarta Sans', system-ui, sans-serif";
 
-  if (!userIsAdmin) {
-    redirect('/dashboard');
-  }
+  useEffect(() => {
+    async function check() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.replace('/login'); return; }
+      const role = user.user_metadata?.role as string;
+      if (!['admin','superadmin'].includes(role)) { router.replace('/dashboard/clients'); return; }
+      setEmail(user.email ?? '');
+      setAuthed(true);
+      setReady(true);
+    }
+    check();
+  }, [router]);
 
-  // Get current user
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const userInitials = user?.email
-    ?.split('@')[0]
-    ?.slice(0, 2)
-    ?.toUpperCase() || 'AD';
-
-  return (
-    <div className="min-h-screen bg-neutral-50">
-      {/* Mobile Header */}
-      <header className="lg:hidden bg-white border-b border-neutral-200 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <Shield className="h-6 w-6 text-primary-600" />
-          <span className="font-bold text-lg">Admin</span>
-        </div>
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-0">
-            <MobileNav userEmail={user?.email} userInitials={userInitials} />
-          </SheetContent>
-        </Sheet>
-      </header>
-
-      <div className="flex">
-        {/* Desktop Sidebar */}
-        <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-neutral-200 h-screen sticky top-0">
-          {/* Logo */}
-          <div className="p-6 border-b border-neutral-100">
-            <Link href="/admin/dashboard" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                <Shield className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <span className="font-bold text-lg text-neutral-900">Admin</span>
-                <span className="text-xs text-neutral-500 block">ReputeOS</span>
-              </div>
-            </Link>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1 overflow-auto">
-            {adminNavItems.map((item) => (
-              <NavItem key={item.href} {...item} />
-            ))}
-          </nav>
-
-          {/* User Section */}
-          <div className="p-4 border-t border-neutral-100">
-            <div className="flex items-center gap-3 mb-3">
-              <Avatar className="h-9 w-9">
-                <AvatarFallback className="bg-primary-100 text-primary-700 text-sm">
-                  {userInitials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-neutral-900 truncate">
-                  {user?.email}
-                </p>
-                <p className="text-xs text-neutral-500 capitalize">
-                  {user?.user_metadata?.role || 'Admin'}
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1" asChild>
-                <Link href="/dashboard">
-                  <LayoutDashboard className="h-4 w-4 mr-2" />
-                  App
-                </Link>
-              </Button>
-              <form action="/api/auth/signout" method="post" className="flex-1">
-                <Button variant="outline" size="sm" className="w-full" type="submit">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              </form>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 min-h-screen">
-          <div className="p-4 lg:p-8 max-w-7xl mx-auto">
-            {children}
-          </div>
-        </main>
-      </div>
+  if (!ready) return (
+    <div style={{ minHeight:'100vh', background:BG, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ width:24, height:24, border:`2px solid ${GOLD}`, borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
-}
 
-function NavItem({
-  title,
-  href,
-  icon: Icon,
-}: {
-  title: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
+  if (!authed) return null;
+
   return (
-    <Link
-      href={href}
-      className={cn(
-        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-        'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100',
-        'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2'
-      )}
-    >
-      <Icon className="h-5 w-5" />
-      {title}
-    </Link>
-  );
-}
+    <div style={{ minHeight:'100vh', background:BG, fontFamily:font, display:'flex' }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+        *{box-sizing:border-box}
+        ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:rgba(201,168,76,0.2);border-radius:4px}
+        .nav-link:hover{background:rgba(255,255,255,0.04)!important;color:rgba(255,255,255,0.8)!important}
+        .nav-active{background:rgba(201,168,76,0.08)!important;color:${GOLD}!important}
+        .adm-btn:hover{background:rgba(255,255,255,0.06)!important}
+      `}</style>
 
-function MobileNav({
-  userEmail,
-  userInitials,
-}: {
-  userEmail?: string;
-  userInitials: string;
-}) {
-  return (
-    <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="p-4 border-b border-neutral-100">
-        <Link href="/admin/dashboard" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-            <Shield className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-bold text-lg">Admin Panel</span>
-        </Link>
-      </div>
+      {/* Sidebar */}
+      <aside style={{ width:220, background:SIDEBAR, borderRight:`1px solid ${BORDER}`, display:'flex', flexDirection:'column', position:'fixed', top:0, left:0, bottom:0, zIndex:40 }}>
+        <div style={{ padding:'20px 18px 16px', borderBottom:`1px solid ${BORDER}` }}>
+          <Link href="/admin/dashboard" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none' }}>
+            <div style={{ width:32, height:32, borderRadius:8, background:'rgba(201,168,76,0.1)', border:`1px solid ${BORDER}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Shield style={{ width:16, color:GOLD }} />
+            </div>
+            <div>
+              <div style={{ fontSize:13, fontWeight:700, color:'white', letterSpacing:'-0.01em' }}>ReputeOS</div>
+              <div style={{ fontSize:10, color:GOLD, fontFamily:"'DM Mono',monospace", letterSpacing:'0.06em' }}>ADMIN PANEL</div>
+            </div>
+          </Link>
+        </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
-        {adminNavItems.map((item) => (
-          <NavItem key={item.href} {...item} />
-        ))}
-      </nav>
+        <nav style={{ flex:1, padding:'12px 10px', overflowY:'auto', display:'flex', flexDirection:'column', gap:2 }}>
+          {NAV.map(({ href, icon: Icon, label }) => {
+            const active = pathname === href || pathname.startsWith(href+'/');
+            return (
+              <Link key={href} href={href} className={`nav-link${active?' nav-active':''}`} style={{
+                display:'flex', alignItems:'center', gap:10, padding:'9px 12px',
+                borderRadius:8, textDecoration:'none', fontSize:13, fontWeight:500,
+                color: active ? GOLD : MUTED, transition:'all 150ms',
+              }}>
+                <Icon style={{ width:15, flexShrink:0 }} />{label}
+              </Link>
+            );
+          })}
+        </nav>
 
-      {/* User Section */}
-      <div className="p-4 border-t border-neutral-100">
-        <div className="flex items-center gap-3 mb-3">
-          <Avatar className="h-9 w-9">
-            <AvatarFallback className="bg-primary-100 text-primary-700 text-sm">
-              {userInitials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-neutral-900 truncate">
-              {userEmail}
-            </p>
+        <div style={{ padding:'14px 12px', borderTop:`1px solid ${BORDER}` }}>
+          <div style={{ fontSize:11, color:MUTED, fontFamily:"'DM Mono',monospace", marginBottom:10, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', paddingLeft:2 }}>{email}</div>
+          <div style={{ display:'flex', gap:6 }}>
+            <Link href="/dashboard/clients" className="adm-btn" style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'7px', border:`1px solid rgba(255,255,255,0.07)`, borderRadius:7, fontSize:11, color:MUTED, textDecoration:'none', transition:'all 150ms' }}>
+              <BarChart3 style={{ width:12 }} /> App
+            </Link>
+            <button onClick={async()=>{ await supabase.auth.signOut(); router.push('/login'); }} className="adm-btn" style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'7px', border:`1px solid rgba(255,255,255,0.07)`, borderRadius:7, fontSize:11, color:MUTED, background:'none', cursor:'pointer', fontFamily:font, transition:'all 150ms' }}>
+              <LogOut style={{ width:12 }} /> Out
+            </button>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="flex-1" asChild>
-            <Link href="/dashboard">App</Link>
-          </Button>
-          <form action="/api/auth/signout" method="post" className="flex-1">
-            <Button variant="outline" size="sm" className="w-full" type="submit">
-              Logout
-            </Button>
-          </form>
+      </aside>
+
+      <main style={{ marginLeft:220, flex:1, minHeight:'100vh', padding:'32px 36px', maxWidth:'calc(100vw - 220px)', overflowX:'hidden' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:28, fontSize:12, color:MUTED }}>
+          <span style={{ color:GOLD, fontFamily:"'DM Mono',monospace", fontSize:11 }}>ADMIN</span>
+          <ChevronRight style={{ width:12 }} />
+          <span>{NAV.find(n=>pathname===n.href||pathname.startsWith(n.href+'/'))?.label??'Panel'}</span>
         </div>
-      </div>
+        {children}
+      </main>
     </div>
   );
 }

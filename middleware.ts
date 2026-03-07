@@ -2,7 +2,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PROTECTED_PATHS = ['/dashboard', '/clients', '/settings'];
+const PROTECTED_PATHS = ['/dashboard', '/clients', '/settings', '/admin'];
 const AUTH_PATHS = ['/login', '/signup'];
 // Always public — no auth check, no redirect
 const PUBLIC_PATHS = ['/home', '/pricing', '/about', '/contact', '/privacy', '/terms'];
@@ -79,12 +79,21 @@ export default async function middleware(request: NextRequest) {
 
     const isProtectedPath = PROTECTED_PATHS.some((p) => pathname.startsWith(p));
     const isAuthPath = AUTH_PATHS.some((p) => pathname.startsWith(p));
+    const isAdminPath = pathname.startsWith('/admin');
 
     // Unauthenticated → block app routes
     if (isProtectedPath && !user) {
       const redirectUrl = new URL('/login', request.url);
       redirectUrl.searchParams.set('from', pathname);
       return NextResponse.redirect(redirectUrl);
+    }
+
+    // Admin paths → require admin/superadmin role
+    if (isAdminPath && user) {
+      const role = user.user_metadata?.role as string;
+      if (!['admin', 'superadmin'].includes(role)) {
+        return NextResponse.redirect(new URL('/dashboard/clients', request.url));
+      }
     }
 
     // Authenticated → skip auth pages, go to app

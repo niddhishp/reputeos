@@ -9,6 +9,7 @@
 
 import { createClient, createAdminClient, verifyClientOwnership } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { discoveryRateLimiter, getClientIP, createRateLimitResponse } from '@/lib/ratelimit';
 import { ClientProfile, SourceResult, AnalysisResult, LSIResult } from '../sources/types';
 import { fetchSearchSources } from '../sources/search';
 import { fetchNewsSources } from '../sources/news';
@@ -26,6 +27,10 @@ export async function POST(request: Request): Promise<Response> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Rate limit: max 3 scans/user/hour to prevent API credit abuse
+  const rateLimitResult = await discoveryRateLimiter.limit(user.id).catch(() => ({ success: true } as { success: boolean }));
+  if (!rateLimitResult.success) return createRateLimitResponse(rateLimitResult as Parameters<typeof createRateLimitResponse>[0]);
 
   const body = await request.json().catch(() => ({}));
   const parsed = Schema.safeParse(body);

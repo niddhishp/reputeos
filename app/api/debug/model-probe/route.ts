@@ -1,3 +1,5 @@
+import { requireAdmin } from '@/lib/admin/auth';
+
 export const maxDuration = 60;
 
 const CANDIDATES = [
@@ -19,33 +21,39 @@ async function probe(modelId: string, apiKey: string) {
         'HTTP-Referer': 'https://reputeos.com',
         'X-Title': 'ReputeOS',
       },
-      // No provider override — let OpenRouter route freely
       body: JSON.stringify({
         model: modelId,
-        messages: [{ role: 'user', content: 'Reply: ok' }],
-        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Reply with exactly: {"ok":true}' }],
+        max_tokens: 20,
         temperature: 0,
       }),
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(15_000),
     });
-    const data = await res.json() as { error?: { message?: string } };
-    if (!res.ok) return { ok: false, error: data.error?.message ?? `HTTP ${res.status}` };
-    return { ok: true };
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { ok: false, status: res.status, error: (err as { error?: { message?: string } }).error?.message ?? 'unknown' };
+    }
+
+    const data = await res.json() as { choices?: { message?: { content?: string } }[] };
+    return { ok: true, content: data.choices?.[0]?.message?.content };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
 export async function GET(): Promise<Response> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return Response.json({ error: 'No OPENROUTER_API_KEY' }, { status: 500 });
+  if (process.env.NODE_ENV === 'production') {
+    return Response.json({ error: 'Not available in production' }, { status: 404 });
+  }
+  await requireAdmin();
+
+  const apiKey = process.env.OPENROUTER_API_KEY ?? '';
+  if (!apiKey) return Response.json({ error: 'OPENROUTER_API_KEY not set' }, { status: 400 });
 
   const results = await Promise.all(
-    CANDIDATES.map(async (id) => ({ model: id, ...await probe(id, apiKey) }))
+    CANDIDATES.map(async (id) => ({ model: id, result: await probe(id, apiKey) }))
   );
 
-  return Response.json({
-    working: results.filter(r => r.ok).map(r => r.model),
-    failing: results.filter(r => !r.ok).map(r => ({ model: r.model, error: r.error })),
-  });
+  return Response.json({ candidates: results });
 }

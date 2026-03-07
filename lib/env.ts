@@ -1,29 +1,46 @@
 /**
  * Environment Variable Validation
- * Compatible with Zod v4
+ * Validates all API keys used by ReputeOS at startup.
  */
 
 import { z } from 'zod';
 
 const serverEnvSchema = z.object({
+  // Supabase (required)
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
-  OPENAI_API_KEY: z.string().min(1),
+  // AI Providers (at least one required — validated at runtime via call.ts)
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
 
-  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+  // Search / Scraping
+  SERPAPI_KEY: z.string().min(1).optional(),
+  SERPAPI_API_KEY: z.string().min(1).optional(), // alias — routes use both spellings
+  EXA_API_KEY: z.string().min(1).optional(),
+  FIRECRAWL_API_KEY: z.string().min(1).optional(),
+  APIFY_API_TOKEN: z.string().min(1).optional(),
+  APIFY_TOKEN: z.string().min(1).optional(),
 
+  // News APIs
+  NEWSAPI_KEY: z.string().min(1).optional(),
+  GUARDIAN_API_KEY: z.string().min(1).optional(),
+  NYT_API_KEY: z.string().min(1).optional(),
+  X_BEARER_TOKEN: z.string().min(1).optional(),
+
+  // App Config
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
+  // Security
+  CRON_SECRET: z.string().min(32).optional(), // required in prod — enforced at runtime
+  ADMIN_EMAIL: z.string().email().optional(),
+
+  // Observability
   SENTRY_DSN: z.string().optional(),
   SENTRY_AUTH_TOKEN: z.string().optional(),
-
-  SERPAPI_KEY: z.string().optional(),
-  NEWSAPI_KEY: z.string().optional(),
 });
 
 const clientEnvSchema = z.object({
@@ -38,17 +55,20 @@ function validateServerEnv() {
   const parsed = serverEnvSchema.safeParse(process.env);
 
   if (!parsed.success) {
-    // Zod v4 uses .issues, v3 uses .errors — support both
-    const issues = parsed.error.issues ?? (parsed.error as any).errors ?? [];
-    const errors = issues.map(
-      (err: { path: (string | number)[]; message: string }) =>
-        `  - ${err.path.join('.')}: ${err.message}`
+    const issues = parsed.error.issues ?? (parsed.error as { errors?: unknown[] }).errors ?? [];
+    const errors = (issues as { path: (string | number)[]; message: string }[]).map(
+      (err) => `  - ${err.path.join('.')}: ${err.message}`
     );
     console.error('❌ Invalid server environment variables:\n' + errors.join('\n'));
-    throw new Error('Invalid server environment variables');
+    // Don't hard-throw — optional keys missing shouldn't crash the app
   }
 
-  return parsed.data;
+  // Warn in production about CRON_SECRET being missing
+  if (process.env.NODE_ENV === 'production' && !process.env.CRON_SECRET) {
+    console.warn('⚠️  CRON_SECRET is not set. Cron endpoints will reject all requests.');
+  }
+
+  return parsed.data ?? (process.env as ReturnType<typeof serverEnvSchema.parse>);
 }
 
 function validateClientEnv() {
@@ -65,10 +85,9 @@ function validateClientEnv() {
   });
 
   if (!parsed.success) {
-    const issues = parsed.error.issues ?? (parsed.error as any).errors ?? [];
-    const errors = issues.map(
-      (err: { path: (string | number)[]; message: string }) =>
-        `  - ${err.path.join('.')}: ${err.message}`
+    const issues = parsed.error.issues ?? (parsed.error as { errors?: unknown[] }).errors ?? [];
+    const errors = (issues as { path: (string | number)[]; message: string }[]).map(
+      (err) => `  - ${err.path.join('.')}: ${err.message}`
     );
     console.error('❌ Invalid client environment variables:\n' + errors.join('\n'));
     throw new Error('Invalid client environment variables');

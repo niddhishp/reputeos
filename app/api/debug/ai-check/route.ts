@@ -1,6 +1,11 @@
 import { callAI } from '@/lib/ai/call';
+import { requireAdmin } from '@/lib/admin/auth';
 
 export async function GET(): Promise<Response> {
+  if (process.env.NODE_ENV === 'production') {
+    return Response.json({ error: 'Not available' }, { status: 404 });
+  }
+  await requireAdmin();
   const keys = {
     openrouter: !!process.env.OPENROUTER_API_KEY,
     anthropic:  !!process.env.ANTHROPIC_API_KEY,

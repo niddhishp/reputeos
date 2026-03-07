@@ -3,14 +3,16 @@
  * 
  * Runs a live SerpAPI search and returns raw results.
  * Use this to diagnose why certain articles aren't being found.
+ * ADMIN ONLY — not available in production.
  */
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { requireAdmin } from '@/lib/admin/auth';
 
 export async function GET(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not available in production' }, { status: 404 });
+  }
+  await requireAdmin();
 
   const { searchParams } = new URL(req.url);
   const name = searchParams.get('name') ?? '';

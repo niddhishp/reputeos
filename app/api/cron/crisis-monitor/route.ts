@@ -20,7 +20,11 @@ const CRISIS_KEYWORDS = [
 function isAuthorized(request: Request): boolean {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return true; // dev mode
+  if (!cronSecret) {
+    // Never silently allow — force explicit configuration in all environments
+    console.error('[CRON] FATAL: CRON_SECRET env var is not set. Refusing to execute.');
+    return false;
+  }
   return authHeader === `Bearer ${cronSecret}`;
 }
 
