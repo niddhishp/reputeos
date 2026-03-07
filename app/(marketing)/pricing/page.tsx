@@ -1,362 +1,248 @@
-// app/(marketing)/pricing/page.tsx
 'use client';
+
 import { useState } from 'react';
-import Link from 'next/link';
-import { Shield, Check, ArrowRight, Zap } from 'lucide-react';
-import { AuthModal } from '@/components/auth-modal';
+import { useRouter } from 'next/navigation';
+import { Check, Zap, Building2, Crown, Shield, BookOpen, CreditCard, Star } from 'lucide-react';
 
-const TIERS = [
+const GOLD   = '#C9A84C';
+const BG     = '#080C14';
+const CARD   = '#0d1117';
+const BORDER = 'rgba(201,168,76,0.15)';
+const font   = "'Plus Jakarta Sans', system-ui, sans-serif";
+
+const PLANS = [
   {
-    id: 'individual',
-    name: 'Individual',
-    tagline: 'For executives managing their own reputation',
-    usd: 29,
-    inr: 2400,
-    period: 'month',
-    trialDays: 14,
-    highlight: false,
-    cta: 'Start 14-day free trial',
-    features: [
-      '1 profile (yours only)',
-      'Monthly Discovery scan',
-      'LSI scoring & gap analysis',
-      'Archetype selection (12 core archetypes)',
-      'Content generation — 10 pieces/month',
-      'Basic Validate dashboard',
-      'Human expert access (email)',
-    ],
-    limits: [
-      'No client management',
-      'No LSI trend history',
-      'No SHIELD monitoring',
-      'No PDF/PowerPoint export',
-    ],
+    id: 'solo', name: 'Solo', price: 4999, icon: Zap,
+    description: 'For independent consultants',
+    badge: null,
+    features: ['3 client profiles', '30 discovery scans/month', 'LSI scoring & tracking', 'AI content generation', '5 modules (no Shield)', 'PDF/PPTX exports'],
+    cta: 'Start Solo',
   },
   {
-    id: 'professional',
-    name: 'Professional',
-    tagline: 'For consultants managing up to 3 clients',
-    usd: 99,
-    inr: 8200,
-    period: 'month',
-    trialDays: 14,
-    highlight: true,
-    cta: 'Start 14-day free trial',
+    id: 'agency', name: 'Agency', price: 14999, icon: Building2,
+    description: 'For PR agencies & consultancies',
     badge: 'Most Popular',
-    features: [
-      'Up to 3 client profiles',
-      'Monthly Discovery scans',
-      'Full 54-archetype library',
-      'Archetype evolution system',
-      'Content generation — 30 pieces/month',
-      'NLP compliance checking',
-      'LSI trend history & forecasting',
-      'Basic crisis monitoring (SHIELD)',
-      'PDF & PowerPoint export',
-      'Priority email support',
-    ],
-    limits: [],
+    features: ['20 client profiles', '200 discovery scans/month', 'All 6 modules incl. Shield', 'Shield Pro — Legal Intelligence', 'Priority AI processing', 'White-label reports', 'Team access (3 seats)'],
+    cta: 'Start Agency',
   },
   {
-    id: 'agency',
-    name: 'Agency',
-    tagline: 'For agencies delivering at scale',
-    usd: 299,
-    inr: 25000,
-    period: 'month',
-    trialDays: 14,
-    highlight: false,
-    cta: 'Start 14-day free trial',
-    features: [
-      'Up to 10 client profiles',
-      'Weekly Discovery scans',
-      'Unlimited content generation',
-      'White-label reports (your branding)',
-      'Team collaboration — 3 seats',
-      '24/7 crisis monitoring & alerts',
-      'Influencer DNA analyzer',
-      'Priority human expert access',
-      'API access',
-      'Dedicated account manager',
-    ],
-    limits: [],
-  },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    tagline: 'For large organisations & full SRE engagements',
-    usd: null,
-    inr: null,
-    period: null,
-    trialDays: null,
-    highlight: false,
-    cta: 'Contact us',
-    features: [
-      'Everything in Agency, plus:',
-      'Unlimited team seats',
-      'Custom SLA guarantees',
-      'Dedicated SRE methodology training',
-      'On-premise deployment option',
-      'Custom AI model fine-tuning',
-      'Quarterly strategic review sessions',
-      'Full 12-month SRE engagement support',
-    ],
-    limits: [],
+    id: 'enterprise', name: 'Enterprise', price: 39999, icon: Crown,
+    description: 'For large agencies & in-house teams',
+    badge: 'Full Power',
+    features: ['Unlimited client profiles', 'Unlimited scans', 'All modules + Shield Pro', 'Dedicated account manager', 'Custom API integrations', 'SLA guarantee', 'Unlimited team seats'],
+    cta: 'Contact Sales',
   },
 ];
 
-const FAQ = [
-  {
-    q: 'What is the 14-day free trial?',
-    a: 'You get full access to the Individual plan features for 14 days, no credit card required. You\'ll complete a Discovery scan, see your real LSI score, and experience the full 6-module flow before deciding.',
-  },
-  {
-    q: 'Can I switch between plans?',
-    a: 'Yes. Upgrade or downgrade at any time. Upgrades take effect immediately. Downgrades apply at your next billing cycle.',
-  },
-  {
-    q: 'Do you offer discounts for annual billing?',
-    a: 'Annual billing saves 20% across all tiers. Contact us or select annual at checkout.',
-  },
-  {
-    q: 'I signed up as an Individual. Can I later manage clients?',
-    a: 'Yes. You can change your account mode at any time in Settings. Upgrading to Professional gives you client management immediately.',
-  },
-  {
-    q: 'What currencies do you accept?',
-    a: 'We accept payments in USD and INR. The displayed prices are equivalent — you\'ll be charged in your preferred currency.',
-  },
-  {
-    q: 'What does the Enterprise / full SRE engagement include?',
-    a: 'This is a complete 12-month engagement: dedicated strategist, full discovery audit, monthly content production, quarterly validation reports, and crisis monitoring. Priced at ₹1.5–1.8 Cr / $180K–$220K for the full engagement.',
-  },
+const ADD_ONS = [
+  { id: 'discover_only', icon: BookOpen, name: 'Discover Module Only', price: 1999, type: 'recurring', desc: 'Just the digital footprint scan. Perfect if you only need reputation data for 1 client.' },
+  { id: 'shield_pro', icon: Shield, name: 'Shield Pro Add-on', price: 2999, type: 'recurring', desc: 'Legal risk intelligence — eCourts, SEBI, MCA, enforcement searches. Add to any plan.' },
+  { id: 'scan_credits_20', icon: CreditCard, name: '20 Scan Credits', price: 999, type: 'one_time', desc: '20 discovery scans that never expire. Top up whenever you need more.' },
+  { id: 'scan_credits_100', icon: Star, name: '100 Scan Credits', price: 3999, type: 'one_time', desc: 'Best value. 100 scans that never expire — ₹40 per scan.' },
 ];
+
+function PlanCard({ plan, loading, onBuy }: {
+  plan: typeof PLANS[0];
+  loading: string | null;
+  onBuy: (type: 'plan', id: string) => void;
+}) {
+  const Icon = plan.icon;
+  const isPopular = plan.badge === 'Most Popular';
+  const isEnterprise = plan.id === 'enterprise';
+  return (
+    <div style={{
+      background: isPopular ? 'linear-gradient(160deg,#0f1a0a 0%,#0d1117 100%)' : CARD,
+      border: `1px solid ${isPopular ? GOLD : BORDER}`,
+      borderRadius: 16, padding: '32px 28px', position: 'relative',
+      display: 'flex', flexDirection: 'column', gap: 24,
+      boxShadow: isPopular ? `0 0 40px rgba(201,168,76,0.08)` : 'none',
+    }}>
+      {plan.badge && (
+        <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)',
+          background: GOLD, color: '#000', fontSize: 11, fontWeight: 700, padding: '4px 14px',
+          borderRadius: 20, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+          {plan.badge}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(201,168,76,0.1)',
+          border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon style={{ width: 18, color: GOLD }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{plan.name}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{plan.description}</div>
+        </div>
+      </div>
+
+      <div>
+        <span style={{ fontSize: 36, fontWeight: 800, color: 'white' }}>
+          ₹{plan.price.toLocaleString('en-IN')}
+        </span>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginLeft: 6 }}>/month</span>
+      </div>
+
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+        {plan.features.map(f => (
+          <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+            <Check style={{ width: 14, color: GOLD, flexShrink: 0, marginTop: 2 }} />{f}
+          </li>
+        ))}
+      </ul>
+
+      <button
+        onClick={() => isEnterprise ? window.open('mailto:hello@reputeos.com?subject=Enterprise Enquiry') : onBuy('plan', plan.id)}
+        disabled={loading === plan.id}
+        style={{
+          width: '100%', padding: '13px', borderRadius: 10, cursor: loading === plan.id ? 'wait' : 'pointer',
+          background: isPopular ? GOLD : 'rgba(255,255,255,0.06)',
+          color: isPopular ? '#000' : 'rgba(255,255,255,0.8)',
+          border: `1px solid ${isPopular ? GOLD : 'rgba(255,255,255,0.1)'}`,
+          fontSize: 14, fontWeight: 700, fontFamily: font, transition: 'all 150ms',
+          opacity: loading === plan.id ? 0.6 : 1,
+        }}>
+        {loading === plan.id ? 'Redirecting…' : plan.cta}
+      </button>
+    </div>
+  );
+}
+
+function AddOnCard({ addon, loading, onBuy }: {
+  addon: typeof ADD_ONS[0];
+  loading: string | null;
+  onBuy: (type: 'addon', id: string) => void;
+}) {
+  const Icon = addon.icon;
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12,
+      padding: '20px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(201,168,76,0.08)',
+        border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon style={{ width: 15, color: GOLD }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>{addon.name}</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 20 }}>
+            {addon.type === 'one_time' ? 'One-time' : '/month'}
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 3 }}>{addon.desc}</div>
+      </div>
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>
+          ₹{addon.price.toLocaleString('en-IN')}
+        </div>
+        <button
+          onClick={() => onBuy('addon', addon.id)}
+          disabled={loading === addon.id}
+          style={{ marginTop: 6, padding: '6px 14px', borderRadius: 7, cursor: loading === addon.id ? 'wait' : 'pointer',
+            background: 'rgba(201,168,76,0.1)', color: GOLD, border: `1px solid ${BORDER}`,
+            fontSize: 12, fontWeight: 600, fontFamily: font, opacity: loading === addon.id ? 0.5 : 1 }}>
+          {loading === addon.id ? '…' : 'Add'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function PricingPage() {
-  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  async function handleBuy(type: 'plan' | 'addon', id: string) {
+    setLoading(id);
+    setError(null);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, id }),
+      });
+      const data = await res.json() as { url?: string; error?: string };
+      if (data.error === 'Unauthorized') { router.push('/login?from=/pricing'); return; }
+      if (data.error) { setError(data.error); return; }
+      if (data.url) window.location.href = data.url;
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setLoading(null);
+    }
+  }
 
   return (
-    <div className="min-h-screen text-white" style={{ backgroundColor: '#080C14', fontFamily: "'Syne', system-ui, sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
-        .mono { font-family: 'DM Mono', monospace; }
-      `}</style>
-
-      <AuthModal isOpen={showModal} onClose={() => setShowModal(false)} defaultTab="signup" />
-
-      {/* Nav */}
-      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, backgroundColor: 'rgba(8,12,20,0.92)', borderBottom: '1px solid rgba(255,255,255,0.05)', backdropFilter: 'blur(8px)' }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Link href="/home" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-            <Shield style={{ width: 20, height: 20, color: '#C9A84C' }} />
-            <span style={{ fontWeight: 700, color: 'white', letterSpacing: '-0.02em' }}>ReputeOS</span>
-          </Link>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={() => { setShowModal(true); }} style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Sign in</button>
-            <button onClick={() => setShowModal(true)} style={{ fontSize: 14, backgroundColor: '#C9A84C', color: '#080C14', fontWeight: 700, padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-              Get started free
-            </button>
-          </div>
-        </div>
-      </nav>
+    <div style={{ minHeight: '100vh', background: BG, fontFamily: font, paddingBottom: 80 }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');*{box-sizing:border-box}`}</style>
 
       {/* Hero */}
-      <section style={{ paddingTop: 120, paddingBottom: 64, paddingLeft: 24, paddingRight: 24, textAlign: 'center' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid rgba(201,168,76,0.3)', backgroundColor: 'rgba(201,168,76,0.05)', borderRadius: 999, padding: '6px 16px', marginBottom: 24 }}>
-          <Zap style={{ width: 12, height: 12, color: '#C9A84C' }} />
-          <span className="mono" style={{ fontSize: 11, color: '#C9A84C', letterSpacing: '0.12em', textTransform: 'uppercase' }}>14-day free trial · No credit card</span>
+      <div style={{ textAlign: 'center', padding: '80px 24px 56px' }}>
+        <div style={{ display: 'inline-block', padding: '5px 16px', borderRadius: 20,
+          background: 'rgba(201,168,76,0.08)', border: `1px solid ${BORDER}`,
+          fontSize: 12, color: GOLD, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 20 }}>
+          PRICING
         </div>
-        <h1 style={{ fontSize: 'clamp(36px, 6vw, 56px)', fontWeight: 900, color: 'white', margin: '0 0 16px', lineHeight: 1.05 }}>
-          Transparent pricing.<br /><span style={{ color: '#C9A84C' }}>Pay for results.</span>
+        <h1 style={{ fontSize: 'clamp(32px,5vw,52px)', fontWeight: 800, color: 'white', margin: '0 0 16px', lineHeight: 1.15 }}>
+          Reputation Engineering,<br />
+          <span style={{ color: GOLD }}>Priced for India</span>
         </h1>
-        <p style={{ fontSize: 17, color: 'rgba(255,255,255,0.4)', maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>
-          Start free. See your real LSI score in 14 days. Upgrade when the data convinces you — and it will.
+        <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', maxWidth: 520, margin: '0 auto' }}>
+          Start free for 14 days. No credit card required. Cancel anytime.
         </p>
+      </div>
 
-        {/* Currency toggle hint */}
-        <p className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 16 }}>
-          Prices shown in USD and INR · Annual billing saves 20%
-        </p>
-      </section>
+      {error && (
+        <div style={{ maxWidth: 400, margin: '0 auto 24px', padding: '12px 20px',
+          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: 10, color: '#ef4444', fontSize: 13, textAlign: 'center' }}>
+          {error}
+        </div>
+      )}
 
-      {/* Pricing cards */}
-      <section style={{ padding: '0 24px 80px', maxWidth: 1280, margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, alignItems: 'start' }}>
-          {TIERS.map((tier) => (
-            <div
-              key={tier.id}
-              style={{
-                border: tier.highlight ? '1px solid #C9A84C' : '1px solid rgba(255,255,255,0.07)',
-                borderRadius: 16,
-                padding: 28,
-                backgroundColor: tier.highlight ? 'rgba(201,168,76,0.04)' : 'rgba(255,255,255,0.015)',
-                position: 'relative',
-              }}
-            >
-              {tier.badge && (
-                <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', backgroundColor: '#C9A84C', color: '#080C14', fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                  {tier.badge}
-                </div>
-              )}
-
-              <div style={{ marginBottom: 20 }}>
-                <p className="mono" style={{ fontSize: 10, color: '#C9A84C', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{tier.id}</p>
-                <h2 style={{ fontSize: 22, fontWeight: 800, color: 'white', margin: '0 0 6px' }}>{tier.name}</h2>
-                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>{tier.tagline}</p>
-              </div>
-
-              {/* Price */}
-              <div style={{ marginBottom: 24, paddingBottom: 24, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                {tier.usd ? (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                      <span style={{ fontSize: 40, fontWeight: 900, color: 'white' }}>${tier.usd}</span>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>/ month</span>
-                    </div>
-                    <p className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 4 }}>₹{tier.inr?.toLocaleString()} / month</p>
-                    {tier.trialDays && (
-                      <p style={{ fontSize: 12, color: '#C9A84C', marginTop: 8 }}>
-                        {tier.trialDays}-day free trial included
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <div>
-                    <span style={{ fontSize: 28, fontWeight: 900, color: 'white' }}>Custom</span>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 6 }}>₹1.5–1.8 Cr / full engagement</p>
-                  </div>
-                )}
-              </div>
-
-              {/* CTA */}
-              <button
-                onClick={() => setShowModal(true)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'center',
-                  padding: '12px 0',
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  marginBottom: 24,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  backgroundColor: tier.highlight ? '#C9A84C' : 'transparent',
-                  color: tier.highlight ? '#080C14' : '#C9A84C',
-                  border: tier.highlight ? 'none' : '1px solid rgba(201,168,76,0.3)',
-                }}
-              >
-                {tier.cta} {tier.id !== 'enterprise' && <ArrowRight style={{ width: 14, height: 14, display: 'inline', verticalAlign: 'middle' }} />}
-              </button>
-
-              {/* Features */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {tier.features.map((f) => (
-                  <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <Check style={{ width: 14, height: 14, color: '#C9A84C', flexShrink: 0, marginTop: 2 }} />
-                    <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4 }}>{f}</span>
-                  </div>
-                ))}
-                {tier.limits.map((l) => (
-                  <div key={l} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <span style={{ width: 14, height: 14, flexShrink: 0, color: 'rgba(255,255,255,0.15)', fontSize: 14, textAlign: 'center' }}>—</span>
-                    <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.2)', lineHeight: 1.4 }}>{l}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+      {/* Plans */}
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 24 }}>
+          {PLANS.map(plan => (
+            <PlanCard key={plan.id} plan={plan} loading={loading} onBuy={handleBuy} />
           ))}
         </div>
-      </section>
 
-      {/* Human Expert note */}
-      <section style={{ padding: '0 24px 80px' }}>
-      {/* Shield Pro Add-on */}
-      <section style={{ padding: '0 24px 80px', maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ background: 'linear-gradient(135deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.02) 100%)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: 16, padding: '40px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 32 }}>
-          <div style={{ flex: 1, minWidth: 280 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <Shield style={{ width: 20, height: 20, color: '#C9A84C' }} />
-              <span style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>Shield Pro — Legal Intelligence</span>
-              <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: '#C9A84C', background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: 5, padding: '2px 8px' }}>AGENCY & ENTERPRISE</span>
-            </div>
-            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', lineHeight: 1.7, maxWidth: 520, marginBottom: 20 }}>
-              Run legal intelligence scans across 23+ Indian legal databases — eCourts, SEBI, MCA, NCLT, NCLAT, and the Enforcement Directorate. Surface litigation risk, regulatory actions, and enforcement signals before they surface in someone else&apos;s due diligence.
+        {/* Module-only section */}
+        <div style={{ marginTop: 64 }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, color: 'white', margin: '0 0 8px' }}>
+              Need just one module?
+            </h2>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', margin: 0 }}>
+              Add individual modules or top up scan credits without a full subscription.
             </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {['eCourts & Civil Litigation', 'SEBI Regulatory Orders', 'MCA Director Records', 'NCLT & Insolvency', 'Enforcement Directorate', 'Media Legal Signals'].map(f => (
-                <span key={f} style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6, padding: '4px 10px' }}>{f}</span>
-              ))}
-            </div>
           </div>
-          <div style={{ textAlign: 'center', minWidth: 200 }}>
-            <div className="mono" style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Included in</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: '#C9A84C', marginBottom: 16 }}>Agency & Enterprise</div>
-            <Link href="/shield-pro" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#C9A84C', color: '#080C14', fontWeight: 700, fontSize: 13, padding: '11px 22px', borderRadius: 9, textDecoration: 'none' }}>
-              Learn More <ArrowRight style={{ width: 14, height: 14 }} />
-            </Link>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {ADD_ONS.map(addon => (
+              <AddOnCard key={addon.id} addon={addon} loading={loading} onBuy={handleBuy} />
+            ))}
           </div>
         </div>
-      </section>
 
-        <div style={{ maxWidth: 720, margin: '0 auto', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 32, backgroundColor: 'rgba(255,255,255,0.01)', textAlign: 'center' }}>
-          <p className="mono" style={{ fontSize: 11, color: '#C9A84C', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Available on all plans</p>
-          <h3 style={{ fontSize: 22, fontWeight: 800, color: 'white', marginBottom: 12 }}>Need a Human Expert?</h3>
-          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7, maxWidth: 500, margin: '0 auto 20px' }}>
-            Stuck on content, strategy, or crisis response? Every plan includes access to our network of reputation experts. One message, and a human strategist joins the conversation within 24 hours.
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
+        {/* FAQ strip */}
+        <div style={{ marginTop: 64, padding: '32px', background: CARD, border: `1px solid ${BORDER}`, borderRadius: 16 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: 'white', margin: '0 0 24px' }}>Common questions</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 20 }}>
             {[
-              { label: 'Polish my draft', price: '₹1,000' },
-              { label: 'Content rewrite', price: '₹2,000' },
-              { label: 'Full strategy session', price: '₹5,000' },
-            ].map((item) => (
-              <div key={item.label} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 16px', fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-                {item.label} <span style={{ color: '#C9A84C', fontWeight: 700 }}>{item.price}</span>
+              ['Can I switch plans?', 'Yes. Upgrade or downgrade anytime from Settings → Billing. Changes take effect immediately.'],
+              ['What counts as a scan?', 'One Discovery scan for one client. Scans reset monthly on your billing date. Purchased credits never expire.'],
+              ['Is there a free trial?', 'Yes — 14 days on the Solo plan, no credit card needed. Full access to all Solo features.'],
+              ['What currency do you charge in?', 'All prices are in INR (₹). We use Stripe for secure payment processing.'],
+            ].map(([q, a]) => (
+              <div key={q}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'white', marginBottom: 6 }}>{q}</div>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>{a}</div>
               </div>
             ))}
           </div>
         </div>
-      </section>
-
-      {/* FAQ */}
-      <section style={{ padding: '0 24px 100px', maxWidth: 720, margin: '0 auto' }}>
-        <h2 style={{ fontSize: 28, fontWeight: 800, color: 'white', textAlign: 'center', marginBottom: 40 }}>Common questions</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {FAQ.map((item, i) => (
-            <div key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.05)', padding: '20px 0' }}>
-              <p style={{ fontWeight: 700, color: 'white', marginBottom: 8, fontSize: 15 }}>{item.q}</p>
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7 }}>{item.a}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Final CTA */}
-      <section style={{ padding: '60px 24px 80px', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <h2 style={{ fontSize: 32, fontWeight: 900, color: 'white', marginBottom: 16 }}>Start with your LSI score. Free.</h2>
-        <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.35)', marginBottom: 32 }}>14 days. No credit card. See your number before you decide.</p>
-        <button onClick={() => setShowModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, backgroundColor: '#C9A84C', color: '#080C14', fontWeight: 700, padding: '14px 28px', borderRadius: 10, fontSize: 15, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-          Get your free LSI score <ArrowRight style={{ width: 16, height: 16 }} />
-        </button>
-      </section>
-
-      {/* Footer */}
-      <footer style={{ borderTop: '1px solid rgba(255,255,255,0.05)', padding: '32px 24px' }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <Link href="/home" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-            <Shield style={{ width: 16, height: 16, color: '#C9A84C' }} />
-            <span style={{ fontWeight: 700, color: 'white', fontSize: 14 }}>ReputeOS</span>
-          </Link>
-          <p className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)' }}>© {new Date().getFullYear()} ReputeOS</p>
-          <div style={{ display: 'flex', gap: 24, fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>
-            <Link href="/home" style={{ color: 'inherit', textDecoration: 'none' }}>Home</Link>
-            <Link href="/login" style={{ color: 'inherit', textDecoration: 'none' }}>Sign in</Link>
-            <Link href="/signup" style={{ color: 'inherit', textDecoration: 'none' }}>Get started</Link>
-          </div>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }

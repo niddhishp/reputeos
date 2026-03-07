@@ -111,3 +111,8 @@ export const isDebugMode = () => {
   if (typeof window === 'undefined') return isDevelopment;
   return process.env.NEXT_PUBLIC_DEBUG_MODE === 'true';
 };
+
+// Stripe + Social keys (add to serverEnvSchema if you want strict validation)
+// These are optional at startup — validated at runtime when routes are called.
+// STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_SOLO, STRIPE_PRICE_AGENCY, etc.
+// LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET

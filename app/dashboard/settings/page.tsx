@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle, AlertTriangle, LogOut, User, Building2, Mail, Shield } from 'lucide-react';
+import { CheckCircle, AlertTriangle, LogOut, User, Building2, Mail, Shield, CreditCard, Linkedin } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { BillingPanel } from '@/components/billing/billing-panel';
 
 const GOLD   = '#C9A84C';
 const CARD   = '#0d1117';
@@ -26,6 +27,8 @@ export default function SettingsPage() {
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
   const [error,   setError]   = useState('');
+  const [activeTab, setActiveTab] = useState<'profile' | 'billing' | 'integrations'>('profile');
+  const [liConnected, setLiConnected] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -35,6 +38,13 @@ export default function SettingsPage() {
         setCompany(data.user.user_metadata?.company ?? '');
       }
     });
+    // Check social connections
+    supabase.from('social_connections').select('platform').eq('platform', 'linkedin').maybeSingle()
+      .then(({ data }) => setLiConnected(!!data));
+    // Check if returning from OAuth
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('social') === 'connected') setActiveTab('integrations');
+    if (params.get('tab') === 'billing') setActiveTab('billing');
   }, []);
 
   async function handleSave() {
@@ -55,12 +65,95 @@ export default function SettingsPage() {
   const planColor = plan === 'enterprise' ? '#818cf8' : plan === 'agency' ? GOLD : '#4ade80';
 
   return (
-    <div style={{ color: 'white', fontFamily: "'Inter', system-ui, sans-serif", maxWidth: 600, paddingBottom: 60 }}>
+    <div style={{ color: 'white', fontFamily: "'Inter', system-ui, sans-serif", maxWidth: 680, paddingBottom: 60 }}>
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 4 }}>Settings</h1>
-        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Manage your account and API configuration</p>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Manage your account, billing, and integrations</p>
       </div>
 
+      {/* Tab bar */}
+      <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, marginBottom: 24, gap: 0 }}>
+        {[
+          { id: 'profile', icon: User, label: 'Profile' },
+          { id: 'billing', icon: CreditCard, label: 'Billing' },
+          { id: 'integrations', icon: Linkedin, label: 'Integrations' },
+        ].map(tab => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id as typeof activeTab)} style={{
+              padding: '10px 20px', background: 'none', border: 'none',
+              borderBottom: active ? `2px solid ${GOLD}` : '2px solid transparent',
+              color: active ? GOLD : 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
+              fontFamily: "'Inter', system-ui", transition: 'all 150ms',
+            }}>
+              <Icon size={13} />{tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === 'billing' && <BillingPanel />}
+
+      {activeTab === 'integrations' && (
+        <div>
+          {/* LinkedIn */}
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16 }}>
+              Social Connections
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: `1px solid ${BORDER}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: '#0A66C2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Linkedin size={18} color="white" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>LinkedIn</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Publish thought leadership directly from Express</div>
+                </div>
+              </div>
+              {liConnected ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981' }} />
+                  <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>Connected</span>
+                </div>
+              ) : (
+                <a href="/api/social/linkedin/auth" style={{ padding: '8px 16px', borderRadius: 8, background: '#0A66C2', color: 'white', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                  Connect
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* API Keys info */}
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 24 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
+              API Configuration
+            </h3>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6, marginBottom: 14 }}>
+              API keys are configured via environment variables in Vercel.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { label: 'OpenRouter (AI Generation)', env: 'OPENROUTER_API_KEY' },
+                { label: 'SerpAPI (Discovery Search)', env: 'SERPAPI_KEY' },
+                { label: 'Exa.ai (Semantic Search)', env: 'EXA_API_KEY' },
+                { label: 'Firecrawl (Web Scraping)', env: 'FIRECRAWL_API_KEY' },
+                { label: 'Stripe (Billing)', env: 'STRIPE_SECRET_KEY' },
+                { label: 'LinkedIn (OAuth)', env: 'LINKEDIN_CLIENT_ID' },
+              ].map(({ label, env }) => (
+                <div key={env} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 7, border: `1px solid ${BORDER}` }}>
+                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{label}</span>
+                  <code style={{ fontSize: 11, color: GOLD, background: `${GOLD}10`, padding: '2px 8px', borderRadius: 5 }}>{env}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'profile' && (<>
       {/* Profile card */}
       <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 20 }}>
@@ -161,6 +254,7 @@ export default function SettingsPage() {
           <LogOut size={13} /> Sign Out
         </button>
       </div>
+      </>)}
     </div>
   );
 }

@@ -45,6 +45,9 @@
     },
     "app/api/lsi/narrative/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/publish-scheduled/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -55,6 +58,10 @@
     {
       "path": "/api/cron/lsi-weekly",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/publish-scheduled",
+      "schedule": "*/5 * * * *"
     }
   ],
   "headers": [
