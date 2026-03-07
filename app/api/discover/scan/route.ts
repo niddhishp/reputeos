@@ -28,6 +28,40 @@ export async function POST(request: Request): Promise<Response> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // ── Subscription gate ────────────────────────────────────────────────────
+  const { data: sub } = await supabase
+    .from('user_subscriptions')
+    .select('plan_id, subscription_status, is_trial, trial_ends_at, scan_credits, scans_used_this_month, add_ons')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  const isActiveTrial = sub?.is_trial && sub?.trial_ends_at && new Date(sub.trial_ends_at) > new Date();
+  const isActivePlan  = sub?.subscription_status === 'active' || sub?.subscription_status === 'trialing';
+  const hasDiscoverAddon = (sub?.add_ons as string[] ?? []).includes('discover_only');
+
+  if (!isActiveTrial && !isActivePlan && !hasDiscoverAddon) {
+    return Response.json({
+      error: 'subscription_required',
+      message: 'A subscription is required to run discovery scans.',
+      upgradeUrl: '/pricing',
+    }, { status: 402 });
+  }
+
+  // Check scan credit balance
+  const isEnterprise = sub?.plan_id === 'enterprise';
+  if (!isEnterprise) {
+    const creditsUsed  = sub?.scans_used_this_month ?? 0;
+    const creditsTotal = sub?.scan_credits ?? 0;
+    if (creditsUsed >= creditsTotal) {
+      return Response.json({
+        error: 'scan_credits_exhausted',
+        message: 'You have used all your scan credits for this month.',
+        upgradeUrl: '/pricing',
+      }, { status: 402 });
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   // Rate limit: max 3 scans/user/hour to prevent API credit abuse
   const rateLimitResult = await discoveryRateLimiter.limit(user.id).catch(() => ({ success: true } as { success: boolean }));
   if (!rateLimitResult.success) return createRateLimitResponse(rateLimitResult as Parameters<typeof createRateLimitResponse>[0]);
@@ -84,7 +118,7 @@ export async function POST(request: Request): Promise<Response> {
   // vercel.json gives us plenty of time. The UI polls Supabase for progress,
   // so the user sees live updates regardless of when this HTTP call resolves.
   try {
-    await runScan(run.id, clientId, client, admin);
+    await runScan(run.id, clientId, client, admin, user.id);
   } catch (err) {
     console.error('Scan failed:', err);
     await admin.from('discover_runs').update({
@@ -180,7 +214,8 @@ async function runScan(
   runId: string,
   clientId: string,
   client: ClientProfile,
-  admin: ReturnType<typeof createAdminClient>
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string
 ): Promise<void> {
   const scanStart = Date.now();
 
@@ -377,6 +412,20 @@ async function runScan(
       updated_at: new Date().toISOString(),
     }).eq('id', clientId);
   }
+
+  // ── Deduct 1 scan credit ───────────────────────────────────────────────────
+  admin.from('user_subscriptions')
+    .select('scans_used_this_month, plan_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+    .then(({ data: subData }: { data: { scans_used_this_month: number; plan_id: string } | null }) => {
+      if (!subData || subData.plan_id === 'enterprise') return;
+      return admin.from('user_subscriptions')
+        .update({ scans_used_this_month: (subData.scans_used_this_month ?? 0) + 1 })
+        .eq('user_id', userId);
+    })
+    .catch((e: unknown) => console.warn('[Scan] failed to deduct credit:', e));
+  // ──────────────────────────────────────────────────────────────────────────
 
   console.log(`✅ Scan: ${client.name} | ${dedupedResults.length} mentions | LSI ${lsi.total} | ${Date.now() - scanStart}ms`);
 }

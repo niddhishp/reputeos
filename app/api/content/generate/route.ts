@@ -73,6 +73,10 @@ export async function POST(request: Request): Promise<Response> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { requireSubscription } = await import('@/lib/stripe/gate');
+  const block = await requireSubscription(user.id);
+  if (block) return block;
+
   let body: unknown;
   try { body = await request.json(); } catch {
     return Response.json({ error: 'Invalid JSON' }, { status: 400 });
