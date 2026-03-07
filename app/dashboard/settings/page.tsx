@@ -126,26 +126,26 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* API Keys info */}
+          {/* API Keys info — removed tool names, kept status-only view */}
           <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 24 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
-              API Configuration
+              Platform Status
             </h3>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6, marginBottom: 14 }}>
-              API keys are configured via environment variables in Vercel.
+              ReputeOS connects to multiple data sources and intelligence services to power your scans. All systems are managed by your workspace administrator.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
-                { label: 'OpenRouter (AI Generation)', env: 'OPENROUTER_API_KEY' },
-                { label: 'SerpAPI (Discovery Search)', env: 'SERPAPI_KEY' },
-                { label: 'Exa.ai (Semantic Search)', env: 'EXA_API_KEY' },
-                { label: 'Firecrawl (Web Scraping)', env: 'FIRECRAWL_API_KEY' },
-                { label: 'Stripe (Billing)', env: 'STRIPE_SECRET_KEY' },
-                { label: 'LinkedIn (OAuth)', env: 'LINKEDIN_CLIENT_ID' },
-              ].map(({ label, env }) => (
-                <div key={env} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 7, border: `1px solid ${BORDER}` }}>
+                { label: 'Intelligence Engine',   status: 'Active' },
+                { label: 'Search & Discovery',    status: 'Active' },
+                { label: 'Media Monitoring',      status: 'Active' },
+                { label: 'Content Intelligence',  status: 'Active' },
+                { label: 'Billing',               status: 'Active' },
+                { label: 'LinkedIn Publishing',   status: liConnected ? 'Connected' : 'Not connected' },
+              ].map(({ label, status }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 7, border: `1px solid ${BORDER}` }}>
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{label}</span>
-                  <code style={{ fontSize: 11, color: GOLD, background: `${GOLD}10`, padding: '2px 8px', borderRadius: 5 }}>{env}</code>
+                  <span style={{ fontSize: 11, color: status === 'Active' || status === 'Connected' ? '#10b981' : 'rgba(255,255,255,0.3)', fontWeight: 600 }}>{status}</span>
                 </div>
               ))}
             </div>
@@ -211,31 +211,6 @@ export default function SettingsPage() {
             ? <><CheckCircle size={14} /> Saved!</>
             : saving ? 'Saving…' : 'Save Changes'}
         </button>
-      </div>
-
-      {/* API Keys info */}
-      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 24, marginBottom: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
-          API Configuration
-        </h3>
-        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6, marginBottom: 14 }}>
-          API keys are configured via environment variables in Vercel. To update keys, go to your Vercel project settings → Environment Variables.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[
-            { label: 'OpenRouter (AI Generation)',       env: 'OPENROUTER_API_KEY' },
-            { label: 'SerpAPI (Discovery Search)',        env: 'SERPAPI_KEY' },
-            { label: 'NewsAPI (Media Monitoring)',        env: 'NEWSAPI_KEY' },
-            { label: 'Exa.ai (Semantic Search)',          env: 'EXA_API_KEY' },
-            { label: 'Firecrawl (Web Scraping)',          env: 'FIRECRAWL_API_KEY' },
-            { label: 'Supabase (Database)',               env: 'NEXT_PUBLIC_SUPABASE_URL' },
-          ].map(({ label, env }) => (
-            <div key={env} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 7, border: `1px solid ${BORDER}` }}>
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{label}</span>
-              <code style={{ fontSize: 11, color: GOLD, background: `${GOLD}10`, padding: '2px 8px', borderRadius: 5 }}>{env}</code>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Danger zone */}

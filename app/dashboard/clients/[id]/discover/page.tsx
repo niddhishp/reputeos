@@ -1047,7 +1047,7 @@ export default function DiscoverPage() {
           <div style={{ width: 60, height: 60, borderRadius: '50%', border: `3px solid ${BORDER}`, borderTop: `3px solid ${GOLD}`, animation: 'spin 1.2s linear infinite', margin: '0 auto 24px' }} />
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'white', marginBottom: 10 }}>Generating Intelligence Report…</h3>
           <p style={{ fontSize: 13, color: MUTED, maxWidth: 420, margin: '0 auto 20px', lineHeight: 1.7 }}>
-            Claude is analysing {clientName}'s digital footprint, career history, industry context, and competitive landscape to produce your 10-section SRE Discovery Report. This takes 45–90 seconds.
+            Analysing {clientName}&apos;s digital footprint, career history, industry context, and competitive landscape to produce your 10-section SRE Discovery Report. This takes 45–90 seconds.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
             {['Profile & Background', 'Search Identity', 'Media Framing', 'Peer Analysis', 'Risk Assessment'].map((s, i) => (

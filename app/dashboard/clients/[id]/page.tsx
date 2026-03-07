@@ -17,7 +17,7 @@ const MODULES = [
   { id: 'discover', label: 'Discover', desc: 'Audit digital footprint across 62 sources', Icon: Search,      color: '#818cf8' },
   { id: 'diagnose', label: 'Diagnose', desc: 'LSI scoring & statistical gap analysis',    Icon: BarChart2,   color: '#60a5fa' },
   { id: 'position', label: 'Position', desc: 'Archetype assignment & content strategy',  Icon: Target,      color: GOLD      },
-  { id: 'express',  label: 'Express',  desc: 'AI-powered thought leadership content',    Icon: PenLine,     color: '#4ade80' },
+  { id: 'express',  label: 'Express',  desc: 'Thought leadership content creation',     Icon: PenLine,     color: '#4ade80' },
   { id: 'validate', label: 'Validate', desc: 'Statistical proof of LSI improvement',     Icon: CheckSquare, color: '#34d399' },
   { id: 'shield',   label: 'Shield',   desc: 'Crisis monitoring & competitor intel',     Icon: Shield,      color: '#f87171' },
 ];

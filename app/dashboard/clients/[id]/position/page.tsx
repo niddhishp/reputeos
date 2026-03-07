@@ -862,6 +862,14 @@ export default function PositionPage() {
       const data = await res.json() as Record<string,unknown>;
       if (!res.ok) throw new Error((data.message ?? data.error ?? 'Analysis failed') as string);
       await load();
+
+      // Auto-trigger influencer discovery in background — no await, user sees position page immediately
+      fetch('/api/influencer/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, autoDiscover: true, limit: 4 }),
+      }).catch(() => { /* silent — hub page will show status */ });
+
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Analysis failed');
     } finally { setAnalysing(false); }

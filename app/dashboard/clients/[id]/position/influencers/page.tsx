@@ -425,9 +425,22 @@ export default function InfluencersPage() {
       supabase.from('influencer_profiles').select('*').eq('client_id', clientId).order('aspiration_score', { ascending: false }),
       supabase.from('positioning').select('target_influencers').eq('client_id', clientId).maybeSingle(),
     ]);
-    setProfiles((profileData ?? []) as InfluencerProfile[]);
-    setAiSuggested((pos?.target_influencers as TargetInfluencer[]) ?? []);
+    const existingProfiles = (profileData ?? []) as InfluencerProfile[];
+    const suggested = (pos?.target_influencers as TargetInfluencer[]) ?? [];
+    setProfiles(existingProfiles);
+    setAiSuggested(suggested);
     setLoading(false);
+
+    // Auto-queue suggested influencers that haven't been added yet
+    if (existingProfiles.length === 0 && suggested.length > 0) {
+      const existingNames = new Set(existingProfiles.map((p: InfluencerProfile) => p.name.toLowerCase()));
+      const toQueue = suggested.filter(s => !existingNames.has(s.name.toLowerCase()));
+      for (const inf of toQueue.slice(0, 4)) {
+        // Fire and forget — addAndQueueInfluencer handles its own state
+        setTimeout(() => addAndQueueInfluencer(inf.name, '', inf.archetype), 100);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
   useEffect(() => { load(); }, [load]);
@@ -547,10 +560,10 @@ export default function InfluencersPage() {
       {aiSuggested.length > 0 && profiles.length === 0 && (
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-            AI-Suggested Influencers from Positioning
+            Recommended from Your Positioning
           </div>
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>
-            These were mapped during your archetype analysis. Click to run content DNA discovery on each.
+            These voices were identified during your archetype analysis as strong role models. Extract their content DNA to build your content strategy.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {aiSuggested.map((inf, i) => (
@@ -603,14 +616,14 @@ export default function InfluencersPage() {
       {/* How it works */}
       <div style={{ marginTop: 28, padding: '16px 20px', background: `${GOLD}06`, border: `1px solid ${GOLD}15`, borderRadius: 12 }}>
         <div style={{ fontSize: 11, color: GOLD, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Clock size={11} /> How Influencer Discovery Works
+          <Clock size={11} /> How Influencer Intelligence Works
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
           {[
-            { n: '1', t: 'Search', d: 'SerpAPI + Exa.ai find their top LinkedIn posts and articles' },
-            { n: '2', t: 'Scrape', d: 'Firecrawl extracts full content from the top 3 posts' },
-            { n: '3', t: 'Extract', d: 'Claude 3.5 analyses structure, style, triggers and template' },
-            { n: '4', t: 'Adapt',  d: 'AI generates a client-specific version — your voice, their blueprint' },
+            { n: '1', t: 'Search',  d: 'We find the influencer\'s top-performing posts and articles across platforms' },
+            { n: '2', t: 'Extract', d: 'Full content is retrieved and broken down into structural components' },
+            { n: '3', t: 'Analyse', d: 'Structure, style, emotional triggers and linguistic patterns are mapped' },
+            { n: '4', t: 'Adapt',   d: 'A personalised blueprint is built — their framework, your voice' },
           ].map(({ n, t, d }) => (
             <div key={n}>
               <div style={{ width: 22, height: 22, borderRadius: '50%', background: `${GOLD}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
